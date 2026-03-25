@@ -505,14 +505,9 @@
 
   tableau.extensions.initializeAsync().then(() => {
     const dashboard = tableau.extensions.dashboardContent?.dashboard;
-    if (dashboard) {
-      tableauContext = `Dashboard: ${dashboard.name}`;
-      detectedWorkbookName = dashboard.workbook?.name || '';
-      document.getElementById('workbookLabel').textContent = detectedWorkbookName || 'Unknown';
-    } else {
-      tableauContext = 'No dashboard context';
-      document.getElementById('workbookLabel').textContent = 'Not detected';
-    }
+    detectedWorkbookName = tableau.extensions.workbook?.name || '';
+    tableauContext = dashboard ? `Dashboard: ${dashboard.name}` : 'No dashboard context';
+    document.getElementById('workbookLabel').textContent = detectedWorkbookName || 'Unknown';
   }).catch(() => {
     tableauContext = 'Running outside Tableau';
     document.getElementById('workbookLabel').textContent = 'Not in Tableau';
