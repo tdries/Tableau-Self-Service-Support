@@ -48,9 +48,10 @@ const sseBuffer  = new Map();
 
 function sseSubscribe(issueNumber, res) {
   res.writeHead(200, {
-    'Content-Type':  'text/event-stream',
-    'Cache-Control': 'no-cache',
-    'Connection':    'keep-alive',
+    'Content-Type':       'text/event-stream',
+    'Cache-Control':      'no-cache',
+    'Connection':         'keep-alive',
+    'X-Accel-Buffering':  'no',
     'Access-Control-Allow-Origin': '*'
   });
   res.write(':\n\n');
