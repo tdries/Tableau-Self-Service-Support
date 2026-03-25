@@ -311,6 +311,21 @@
     .log-text { color: var(--text); flex: 1; }
     .log-pct  { color: var(--muted); font-size: 11px; flex-shrink: 0; }
 
+    /* ── Fix notice ── */
+    .fix-notice {
+      display: none;
+      margin-top: 12px;
+      padding: 10px 14px;
+      background: var(--lime-light);
+      border-left: 3px solid var(--lime);
+      border-radius: 4px;
+      font-size: 12px;
+      color: var(--green);
+      line-height: 1.5;
+    }
+
+    .fix-notice.visible { display: block; }
+
     /* ── Accept / Restore buttons ── */
     .fix-actions {
       display: none;
@@ -410,6 +425,10 @@
       <div id="activityFill" class="activity-progress-fill"></div>
     </div>
     <div id="logEntries" class="log-entries"></div>
+    <div id="fixNotice" class="fix-notice">
+      <strong>Your requested change has been applied.</strong>
+      Please review the dashboard thoroughly before accepting. If the result is not as expected, use Restore to revert to the previous version.
+    </div>
     <div id="fixActions" class="fix-actions">
       <button class="btn-accept" onclick="acceptFix()">Accept</button>
       <button class="btn-restore" onclick="restoreFix()">Restore</button>
@@ -426,6 +445,7 @@
   if (pendingRestoreIssue) {
     document.getElementById('activitySection').classList.add('visible');
     document.getElementById('fixActions').classList.add('visible');
+          document.getElementById('fixNotice').classList.add('visible');
   }
 
   tableau.extensions.initializeAsync().then(() => {
@@ -567,6 +587,7 @@
           pendingRestoreIssue = issNum;
           localStorage.setItem('pendingRestoreIssue', issNum);
           document.getElementById('fixActions').classList.add('visible');
+          document.getElementById('fixNotice').classList.add('visible');
         }
       }
     };
@@ -575,6 +596,7 @@
 
   function acceptFix() {
     document.getElementById('fixActions').classList.remove('visible');
+    document.getElementById('fixNotice').classList.remove('visible');
     pendingRestoreIssue = null;
     localStorage.removeItem('pendingRestoreIssue');
     showStatus('Thank you, your case has been logged as closed.', 'success');
@@ -593,6 +615,7 @@
         body: JSON.stringify({ issueNumber: pendingRestoreIssue })
       });
       document.getElementById('fixActions').classList.remove('visible');
+    document.getElementById('fixNotice').classList.remove('visible');
       pendingRestoreIssue = null;
       localStorage.removeItem('pendingRestoreIssue');
     } catch (e) {
