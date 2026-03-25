@@ -445,8 +445,9 @@
   </div>
 
   <div class="field">
-    <label>Workbook</label>
-    <div id="workbookLabel" class="context-badge">Detecting…</div>
+    <label>Workbook URL</label>
+    <input type="text" id="workbookUrl" placeholder="Paste your Tableau dashboard URL here" autocomplete="off" />
+    <div id="workbookHint" class="field-hint"></div>
   </div>
 
   <button class="submit-btn" id="submitBtn" onclick="submitIssue()">Submit Issue</button>
@@ -505,12 +506,29 @@
 
   tableau.extensions.initializeAsync().then(() => {
     const dashboard = tableau.extensions.dashboardContent?.dashboard;
-    detectedWorkbookName = tableau.extensions.workbook?.name || '';
     tableauContext = dashboard ? `Dashboard: ${dashboard.name}` : 'No dashboard context';
-    document.getElementById('workbookLabel').textContent = detectedWorkbookName || 'Unknown';
   }).catch(() => {
     tableauContext = 'Running outside Tableau';
-    document.getElementById('workbookLabel').textContent = 'Not in Tableau';
+  });
+
+  document.getElementById('workbookUrl').addEventListener('input', (e) => {
+    const url = e.target.value.trim();
+    const hint = document.getElementById('workbookHint');
+    if (!url) {
+      detectedWorkbookName = '';
+      hint.textContent = '';
+      return;
+    }
+    const match = url.match(/\/views\/([^/?#]+)/);
+    if (match) {
+      detectedWorkbookName = decodeURIComponent(match[1]);
+      hint.textContent = `● Workbook: ${detectedWorkbookName}`;
+      hint.style.color = '#00696E';
+    } else {
+      detectedWorkbookName = '';
+      hint.textContent = '● Could not parse workbook name from URL';
+      hint.style.color = '#b83010';
+    }
   });
 
   async function submitIssue() {
