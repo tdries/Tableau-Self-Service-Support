@@ -19,6 +19,7 @@ function loadEnv() {
 const env          = loadEnv();
 const e            = k => env[k] || process.env[k] || '';
 const GITHUB_TOKEN = e('api') || e('GITHUB_TOKEN') || e('GH_TOKEN');
+const GIPHY_KEY    = e('GIPHY_API_KEY');
 const SMEE_URL     = e('SMEE_URL');
 const REPO         = 'tdries/Tableau-Self-Service-Support';
 const PORT         = parseInt(process.env.PORT || env.PORT || '8766');
@@ -249,6 +250,33 @@ const server = http.createServer((req, res) => {
       return res.end(JSON.stringify({ issueNumber }));
     }
     res.writeHead(204); return res.end();
+  }
+
+  // --- GET /api/gif?q=...  (Giphy search proxy) ---
+  if (req.method === 'GET' && url.pathname === '/api/gif') {
+    const q = url.searchParams.get('q') || 'loading';
+    if (!GIPHY_KEY) {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ url: null }));
+    }
+    const giphyPath = `/v1/gifs/search?api_key=${GIPHY_KEY}&q=${encodeURIComponent(q)}&limit=10&rating=g&lang=en`;
+    const giphyReq = https.request({ hostname: 'api.giphy.com', path: giphyPath }, (giphyRes) => {
+      let data = '';
+      giphyRes.on('data', c => data += c);
+      giphyRes.on('end', () => {
+        try {
+          const results = JSON.parse(data).data || [];
+          if (!results.length) { res.writeHead(200, { 'Content-Type': 'application/json' }); return res.end(JSON.stringify({ url: null })); }
+          const pick = results[Math.floor(Math.random() * results.length)];
+          const gifUrl = pick.images?.fixed_height?.url || pick.images?.original?.url;
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ url: gifUrl }));
+        } catch { res.writeHead(500); res.end(); }
+      });
+    });
+    giphyReq.on('error', () => { res.writeHead(500); res.end(); });
+    giphyReq.end();
+    return;
   }
 
   // --- GET /api/next-restore  (agent polls this) ---

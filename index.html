@@ -482,15 +482,6 @@
 </div>
 
 <script>
-  const WAITING_GIFS = [
-    { url: 'https://media.giphy.com/media/JIX9t2j0ZTN9S/giphy.gif',       caption: 'BUDA is typing furiously…' },
-    { url: 'https://media.giphy.com/media/o0vwzuFwCGAFO/giphy.gif',       caption: 'Patience is a virtue. Allegedly.' },
-    { url: 'https://media.giphy.com/media/3o7TKSjRrfIPjeiVyM/giphy.gif',  caption: 'The AI has entered the chat.' },
-    { url: 'https://media.giphy.com/media/077i6AULCXc0FKTj9s/giphy.gif',  caption: 'Processing at maximum robot speed…' },
-    { url: 'https://media.giphy.com/media/xT9IgzoKnwFNmISR8I/giphy.gif',  caption: 'This is fine. Everything is fine.' },
-    { url: 'https://media.giphy.com/media/LmNwrBhejkK9EFP504/giphy.gif',  caption: 'BUDA on the case.' },
-    { url: 'https://media.giphy.com/media/3oEjI6SIIHBdRxXI40/giphy.gif',  caption: 'Deep in thought…' },
-  ];
 
   let tableauContext = '';
   let detectedWorkbookName = '';
@@ -584,11 +575,18 @@
 
     section.classList.add('visible');
 
-    // Pick a random GIF
-    const gif = WAITING_GIFS[Math.floor(Math.random() * WAITING_GIFS.length)];
-    document.getElementById('gifImg').src = gif.url;
-    document.getElementById('gifCaption').textContent = gif.caption;
-    document.getElementById('gifDisplay').classList.add('visible');
+    // Fetch a GIF based on the issue title
+    const query = document.getElementById('issueTitle').value.trim() || 'loading';
+    fetch(`/api/gif?q=${encodeURIComponent(query)}`)
+      .then(r => r.json())
+      .then(({ url }) => {
+        if (url) {
+          document.getElementById('gifImg').src = url;
+          document.getElementById('gifCaption').textContent = `BUDA is working on: "${query}"`;
+          document.getElementById('gifDisplay').classList.add('visible');
+        }
+      })
+      .catch(() => {});
 
     function addEntry(step, pct, type) {
       const now  = new Date();
