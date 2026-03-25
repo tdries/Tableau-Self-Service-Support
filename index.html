@@ -419,7 +419,14 @@
 
 <script>
   let tableauContext = '';
-  let pendingRestoreIssue = null; // issueNumber
+  let pendingRestoreIssue = localStorage.getItem('pendingRestoreIssue')
+    ? parseInt(localStorage.getItem('pendingRestoreIssue')) : null;
+
+  // Restore buttons if a fix was pending before a reload
+  if (pendingRestoreIssue) {
+    document.getElementById('activitySection').classList.add('visible');
+    document.getElementById('fixActions').classList.add('visible');
+  }
 
   tableau.extensions.initializeAsync().then(() => {
     const dashboard = tableau.extensions.dashboardContent?.dashboard;
@@ -558,6 +565,7 @@
         es.close();
         if (type === 'ok' && hasBackup && issueNumber) {
           pendingRestoreIssue = issueNumber;
+          localStorage.setItem('pendingRestoreIssue', issueNumber);
           document.getElementById('fixActions').classList.add('visible');
         }
       }
@@ -568,6 +576,7 @@
   function acceptFix() {
     document.getElementById('fixActions').classList.remove('visible');
     pendingRestoreIssue = null;
+    localStorage.removeItem('pendingRestoreIssue');
     showStatus('Thank you, your case has been logged as closed.', 'success');
   }
 
@@ -585,6 +594,7 @@
       });
       document.getElementById('fixActions').classList.remove('visible');
       pendingRestoreIssue = null;
+      localStorage.removeItem('pendingRestoreIssue');
     } catch (e) {
       btn.textContent = 'Restore';
       btn.disabled = false;
