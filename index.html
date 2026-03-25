@@ -445,9 +445,8 @@
   </div>
 
   <div class="field">
-    <label>Workbook URL</label>
-    <input type="text" id="workbookUrl" placeholder="Paste your Tableau dashboard URL here" autocomplete="off" />
-    <div id="workbookHint" class="field-hint"></div>
+    <label>Workbook name</label>
+    <input type="text" id="workbookUrl" placeholder="e.g. Superstore" autocomplete="off" />
   </div>
 
   <button class="submit-btn" id="submitBtn" onclick="submitIssue()">Submit Issue</button>
@@ -502,25 +501,6 @@
     tableauContext = 'Running outside Tableau';
   });
 
-  document.getElementById('workbookUrl').addEventListener('input', (e) => {
-    const url = e.target.value.trim();
-    const hint = document.getElementById('workbookHint');
-    if (!url) {
-      detectedWorkbookName = '';
-      hint.textContent = '';
-      return;
-    }
-    const match = url.match(/\/views\/([^/?#]+)/);
-    if (match) {
-      detectedWorkbookName = decodeURIComponent(match[1]);
-      hint.textContent = `● Workbook: ${detectedWorkbookName}`;
-      hint.style.color = '#00696E';
-    } else {
-      detectedWorkbookName = '';
-      hint.textContent = '● Could not parse workbook name from URL';
-      hint.style.color = '#b83010';
-    }
-  });
 
   async function submitIssue() {
     const title       = document.getElementById('issueTitle').value.trim();
@@ -536,9 +516,7 @@
     btn.textContent = 'Submitting…';
 
     try {
-      const rawUrl = document.getElementById('workbookUrl').value.trim();
-      const urlMatch = rawUrl.match(/\/views\/([^/?#]+)/);
-      const workbookName = urlMatch ? decodeURIComponent(urlMatch[1]) : detectedWorkbookName;
+      const workbookName = document.getElementById('workbookUrl').value.trim();
 
       const res = await fetch('/api/submit-issue', {
         method: 'POST',
