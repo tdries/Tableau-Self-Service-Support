@@ -311,6 +311,21 @@
     .log-text { color: var(--text); flex: 1; }
     .log-pct  { color: var(--muted); font-size: 11px; flex-shrink: 0; }
 
+    /* ── Refresh prompt (shown during live session after fix) ── */
+    .refresh-prompt {
+      display: none;
+      margin-top: 12px;
+      padding: 10px 14px;
+      background: #EEF4FB;
+      border-left: 3px solid var(--blue);
+      border-radius: 4px;
+      font-size: 12px;
+      color: #004a78;
+      line-height: 1.5;
+    }
+
+    .refresh-prompt.visible { display: block; }
+
     /* ── Fix notice ── */
     .fix-notice {
       display: none;
@@ -401,17 +416,6 @@
     <textarea id="issueBody" placeholder="Describe the issue in detail. Include steps to reproduce, expected vs actual behavior, etc."></textarea>
   </div>
 
-  <div class="field">
-    <label>Workbook <span class="opt">(auto-detected)</span></label>
-    <input type="text" id="workbookName" placeholder="Workbook name, e.g. Superstore" autocomplete="off" />
-    <div id="workbookHint" class="field-hint"></div>
-  </div>
-
-  <div class="field">
-    <label>Tableau Context</label>
-    <div id="contextBadge" class="context-badge">Loading…</div>
-  </div>
-
   <button class="submit-btn" id="submitBtn" onclick="submitIssue()">Submit Issue</button>
 
   <div id="status" class="status"></div>
@@ -425,6 +429,9 @@
       <div id="activityFill" class="activity-progress-fill"></div>
     </div>
     <div id="logEntries" class="log-entries"></div>
+    <div id="refreshPrompt" class="refresh-prompt">
+      <strong>Fix applied.</strong> Please refresh your Tableau dashboard to review the changes, then return here to Accept or Restore.
+    </div>
     <div id="fixNotice" class="fix-notice">
       <strong>Your requested change has been applied.</strong>
       Please review the dashboard thoroughly before accepting. If the result is not as expected, use Restore to revert to the previous version.
@@ -438,6 +445,7 @@
 
 <script>
   let tableauContext = '';
+  let detectedWorkbookName = '';
   let pendingRestoreIssue = localStorage.getItem('pendingRestoreIssue')
     ? parseInt(localStorage.getItem('pendingRestoreIssue')) : null;
 
@@ -452,21 +460,12 @@
     const dashboard = tableau.extensions.dashboardContent?.dashboard;
     if (dashboard) {
       tableauContext = `Dashboard: ${dashboard.name}`;
-      document.getElementById('contextBadge').textContent = tableauContext;
-
-      const workbookName = dashboard.workbook?.name;
-      if (workbookName) {
-        document.getElementById('workbookName').value = workbookName;
-        document.getElementById('workbookHint').textContent = '● Auto-detected from dashboard';
-        document.getElementById('workbookHint').style.color = '#00696E';
-      }
+      detectedWorkbookName = dashboard.workbook?.name || '';
     } else {
       tableauContext = 'No dashboard context';
-      document.getElementById('contextBadge').textContent = tableauContext;
     }
   }).catch(() => {
     tableauContext = 'Running outside Tableau';
-    document.getElementById('contextBadge').textContent = tableauContext + ' (dev mode)';
   });
 
   async function submitIssue() {
@@ -483,12 +482,10 @@
     btn.textContent = 'Submitting…';
 
     try {
-      const workbookName = document.getElementById('workbookName').value.trim();
-
       const res = await fetch('/api/submit-issue', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, category, description, context: tableauContext, workbookName })
+        body: JSON.stringify({ title, category, description, context: tableauContext, workbookName: detectedWorkbookName })
       });
 
       const data = await res.json();
@@ -510,39 +507,6 @@
       btn.textContent = 'Submit Issue';
     }
   }
-
-  let resolveTimer = null;
-  document.getElementById('workbookPath').addEventListener('input', (e) => {
-    clearTimeout(resolveTimer);
-    const val = e.target.value.trim();
-    const hint = document.getElementById('workbookHint');
-    if (!val) { hint.textContent = ''; return; }
-
-    if (val.startsWith('/') && (val.endsWith('.twbx') || val.endsWith('.twb'))) {
-      hint.textContent = '';
-      return;
-    }
-
-    hint.textContent = 'Searching…';
-    hint.style.color = '#6B7A8D';
-    resolveTimer = setTimeout(() => {
-      const name = val.replace(/\.(twbx|twb)$/i, '');
-      fetch(`/api/find-workbook?name=${encodeURIComponent(name)}`)
-        .then(r => r.json())
-        .then(data => {
-          if (data.path) {
-            e.target.value = data.path;
-            e.target.style.color = '#1A2B3C';
-            hint.style.color = '#00696E';
-            hint.textContent = '● Found';
-          } else {
-            hint.style.color = '#b83010';
-            hint.textContent = '● Not found — try a different name';
-          }
-        })
-        .catch(() => { hint.textContent = ''; });
-    }, 400);
-  });
 
   function startProgressTracking(issueNumber) {
     const section  = document.getElementById('activitySection');
@@ -586,8 +550,7 @@
         if (type === 'ok' && hasBackup && issNum) {
           pendingRestoreIssue = issNum;
           localStorage.setItem('pendingRestoreIssue', issNum);
-          document.getElementById('fixActions').classList.add('visible');
-          document.getElementById('fixNotice').classList.add('visible');
+          document.getElementById('refreshPrompt').classList.add('visible');
         }
       }
     };
@@ -597,6 +560,7 @@
   function acceptFix() {
     document.getElementById('fixActions').classList.remove('visible');
     document.getElementById('fixNotice').classList.remove('visible');
+    document.getElementById('refreshPrompt').classList.remove('visible');
     pendingRestoreIssue = null;
     localStorage.removeItem('pendingRestoreIssue');
     showStatus('Thank you, your case has been logged as closed.', 'success');
@@ -615,7 +579,8 @@
         body: JSON.stringify({ issueNumber: pendingRestoreIssue })
       });
       document.getElementById('fixActions').classList.remove('visible');
-    document.getElementById('fixNotice').classList.remove('visible');
+      document.getElementById('fixNotice').classList.remove('visible');
+      document.getElementById('refreshPrompt').classList.remove('visible');
       pendingRestoreIssue = null;
       localStorage.removeItem('pendingRestoreIssue');
     } catch (e) {
