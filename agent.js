@@ -213,6 +213,16 @@ function extractRelevantXml(xml) {
   if (filterMatches.length)
     sections.push(`<!-- FILTERS -->\n${cap(filterMatches.slice(0, 20).map(m => m[0].trim()).join('\n'), 2000)}`);
 
+  // Worksheet names — so BUDA knows what sheets already exist
+  const wsNames = [...xml.matchAll(/<worksheet name='([^']+)'/g)].map(m => m[1]);
+  if (wsNames.length)
+    sections.push(`<!-- EXISTING WORKSHEETS -->\n${wsNames.map(n => `<worksheet name='${n}'/>`).join('\n')}`);
+
+  // Full dashboard sections — layout tree needed to add new sheets to dashboards
+  const dashMatches = [...xml.matchAll(/<dashboard\b[\s\S]*?<\/dashboard>/g)];
+  if (dashMatches.length)
+    sections.push(`<!-- DASHBOARDS (layout) -->\n${cap(dashMatches.map(m => m[0]).join('\n'), 10000)}`);
+
   return sections.join('\n\n') || '<!-- No key sections extracted -->';
 }
 
@@ -346,7 +356,8 @@ Return one of three operation types per fix:
 - NEVER modify \`<connection>\` attributes
 - Preserve the exact quoting style of surrounding XML
 - When fixing a calculated field, only change the \`formula='...'\` attribute value
-- A structurally valid change can still break Tableau — prefer single-attribute edits`,
+- A structurally valid change can still break Tableau — prefer single-attribute edits
+- **CRITICAL — New content visibility:** When creating a new \`<worksheet>\`, you MUST also add a corresponding \`<zone type='worksheet' name='SheetName' ...>\` inside the target dashboard's \`<zones>\` tree. Without this the user will never see the new chart. Copy the structure of an existing zone for correct attribute syntax. Place it as a sibling zone inside the relevant \`<zone type='layout-basic'>\` or \`<zone type='layout-flow'>\` container.`,
 
       messages: [{
         role: 'user',
