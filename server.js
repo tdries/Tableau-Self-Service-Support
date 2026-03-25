@@ -17,8 +17,9 @@ function loadEnv() {
 }
 
 const env          = loadEnv();
-const GITHUB_TOKEN = env.api || env.GITHUB_TOKEN || env.GH_TOKEN || '';
-const SMEE_URL     = env.SMEE_URL || '';
+const e            = k => env[k] || process.env[k] || '';
+const GITHUB_TOKEN = e('api') || e('GITHUB_TOKEN') || e('GH_TOKEN');
+const SMEE_URL     = e('SMEE_URL');
 const REPO         = 'tdries/Tableau-Self-Service-Support';
 const PORT         = parseInt(process.env.PORT || env.PORT || '8766');
 
