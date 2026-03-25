@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Self-Service Support · Biztory</title>
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/tableau.extensions.1.latest.min.js"></script>
+  <style>
+    :root {
+      --navy:       #00375A;
+      --orange:     #FF5833;
+      --lime:       #64FA8C;
+      --green:      #00696E;
+      --blue:       #006EFF;
+      --white:      #FFFFFF;
+      --lime-light: #E6FAF2;
+      --orange-light: #FCF2E8;
+      --surface:    #F4F6F8;
+      --border:     #E2E6EA;
+      --text:       #1A2B3C;
+      --muted:      #6B7A8D;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Be Vietnam Pro', -apple-system, sans-serif;
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      background: var(--surface);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 0;
+    }
+
+    /* ── Header ── */
+    .header {
+      width: 100%;
+      background: var(--navy);
+      padding: 14px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+
+    .header img {
+      height: 22px;
+      width: auto;
+      filter: brightness(0) invert(1);
+      display: block;
+    }
+
+    .header-label {
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.5);
+    }
+
+    /* ── Orange accent strip ── */
+    .accent-strip {
+      width: 100%;
+      height: 3px;
+      background: var(--orange);
+      flex-shrink: 0;
+    }
+
+    /* ── Card ── */
+    .container {
+      background: var(--white);
+      border-radius: 10px;
+      box-shadow: 0 2px 16px rgba(0,55,90,0.08);
+      padding: 24px;
+      width: 100%;
+      max-width: 520px;
+      margin: 20px 16px;
+    }
+
+    .card-title {
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: -0.025em;
+      color: var(--navy);
+      margin-bottom: 2px;
+    }
+
+    .card-subtitle {
+      font-size: 11px;
+      color: var(--muted);
+      margin-bottom: 20px;
+    }
+
+    .divider {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin-bottom: 18px;
+    }
+
+    /* ── Form fields ── */
+    .field { margin-bottom: 14px; }
+
+    label {
+      display: block;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--navy);
+      margin-bottom: 5px;
+    }
+
+    label .opt {
+      font-weight: 400;
+      text-transform: none;
+      letter-spacing: 0;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    input[type="text"],
+    select,
+    textarea {
+      width: 100%;
+      padding: 9px 12px;
+      border: 1.5px solid var(--border);
+      border-radius: 6px;
+      font-size: 13px;
+      font-family: inherit;
+      letter-spacing: -0.01em;
+      color: var(--text);
+      background: #FAFBFC;
+      transition: border-color 0.15s, background 0.15s;
+    }
+
+    input:focus, select:focus, textarea:focus {
+      outline: none;
+      border-color: var(--orange);
+      background: var(--white);
+    }
+
+    textarea { resize: vertical; min-height: 96px; }
+
+    select { cursor: pointer; }
+
+    /* ── Submit button ── */
+    .submit-btn {
+      width: 100%;
+      padding: 11px;
+      background: var(--orange);
+      color: var(--white);
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      font-family: inherit;
+      letter-spacing: 0.01em;
+      cursor: pointer;
+      margin-top: 4px;
+      transition: background 0.15s, transform 0.1s;
+    }
+
+    .submit-btn:hover  { background: #e04020; }
+    .submit-btn:active { transform: scale(0.99); }
+    .submit-btn:disabled { background: var(--border); color: var(--muted); cursor: not-allowed; transform: none; }
+
+    /* ── Status messages ── */
+    .status {
+      margin-top: 12px;
+      padding: 10px 14px;
+      border-radius: 6px;
+      font-size: 13px;
+      display: none;
+      border-left: 3px solid transparent;
+    }
+
+    .status.success {
+      background: var(--lime-light);
+      color: var(--green);
+      border-left-color: var(--lime);
+      display: block;
+    }
+
+    .status.error {
+      background: var(--orange-light);
+      color: #b83010;
+      border-left-color: var(--orange);
+      display: block;
+    }
+
+    .status a { color: inherit; font-weight: 600; }
+
+    /* ── Context badge ── */
+    .context-badge {
+      display: inline-block;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 4px 10px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    /* ── Hint text ── */
+    .field-hint {
+      font-size: 11px;
+      margin-top: 4px;
+      color: var(--muted);
+      min-height: 14px;
+    }
+
+    /* ── Activity log ── */
+    .activity-section {
+      margin-top: 16px;
+      display: none;
+    }
+
+    .activity-section.visible { display: block; }
+
+    .activity-header {
+      background: var(--navy);
+      color: rgba(255,255,255,0.9);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      padding: 7px 12px;
+      border-radius: 6px 6px 0 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .activity-progress-bar {
+      height: 3px;
+      background: var(--border);
+      overflow: hidden;
+    }
+
+    .activity-progress-fill {
+      height: 100%;
+      background: var(--orange);
+      width: 0%;
+      transition: width 0.4s ease;
+    }
+
+    .activity-progress-fill.done { background: var(--green); }
+
+    .log-entries {
+      border: 1px solid var(--border);
+      border-top: none;
+      border-radius: 0 0 6px 6px;
+      max-height: 220px;
+      overflow-y: auto;
+      background: #FAFBFC;
+    }
+
+    .log-entry {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      padding: 7px 12px;
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
+      animation: fadeIn 0.2s ease;
+    }
+
+    .log-entry:last-child { border-bottom: none; }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-3px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .log-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .log-info  .log-dot { background: var(--muted); }
+    .log-ok    .log-dot { background: var(--green); }
+    .log-error .log-dot { background: var(--orange); }
+    .log-warn  .log-dot { background: #D97706; }
+    .log-active .log-dot {
+      background: var(--orange);
+      box-shadow: 0 0 0 0 rgba(255,88,51,0.4);
+      animation: pulse 1.2s infinite;
+    }
+
+    @keyframes pulse {
+      0%   { box-shadow: 0 0 0 0 rgba(255,88,51,0.4); }
+      70%  { box-shadow: 0 0 0 5px rgba(255,88,51,0); }
+      100% { box-shadow: 0 0 0 0 rgba(255,88,51,0); }
+    }
+
+    .log-time {
+      color: var(--muted);
+      font-size: 10px;
+      font-variant-numeric: tabular-nums;
+      flex-shrink: 0;
+      min-width: 52px;
+    }
+
+    .log-text { color: var(--text); flex: 1; }
+    .log-pct  { color: var(--muted); font-size: 11px; flex-shrink: 0; }
+
+    /* ── Accept / Restore buttons ── */
+    .fix-actions {
+      display: none;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .fix-actions.visible { display: flex; }
+
+    .fix-actions button {
+      flex: 1;
+      padding: 9px;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      transition: background 0.15s, transform 0.1s;
+    }
+
+    .fix-actions button:active { transform: scale(0.98); }
+
+    .btn-accept {
+      background: var(--navy);
+      color: var(--white);
+    }
+
+    .btn-accept:hover { background: #004a78; }
+
+    .btn-restore {
+      background: var(--orange-light);
+      color: var(--orange);
+      border: 1.5px solid var(--orange) !important;
+    }
+
+    .btn-restore:hover { background: #f9e0d8; }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <img src="/biztory-logo.png" alt="Biztory" />
+  <span class="header-label">Support</span>
+</div>
+<div class="accent-strip"></div>
+
+<div class="container">
+  <div class="card-title">Biztory 1st level Tableau AI Support</div>
+  <div class="card-subtitle">Submit a request directly as a GitHub Issue</div>
+  <hr class="divider" />
+
+  <div class="field">
+    <label>Title</label>
+    <input type="text" id="issueTitle" placeholder="Short summary of the issue" />
+  </div>
+
+  <div class="field">
+    <label>Category</label>
+    <select id="issueCategory">
+      <option value="">Select a category</option>
+      <option value="bug">Bug / Data discrepancy</option>
+      <option value="access">Access request</option>
+      <option value="feature">Feature request</option>
+      <option value="question">Question / How-to</option>
+      <option value="performance">Performance issue</option>
+      <option value="other">Other</option>
+    </select>
+  </div>
+
+  <div class="field">
+    <label>Description</label>
+    <textarea id="issueBody" placeholder="Describe the issue in detail. Include steps to reproduce, expected vs actual behavior, etc."></textarea>
+  </div>
+
+  <div class="field">
+    <label>Workbook <span class="opt">(auto-detected)</span></label>
+    <input type="text" id="workbookName" placeholder="Workbook name, e.g. Superstore" autocomplete="off" />
+    <div id="workbookHint" class="field-hint"></div>
+  </div>
+
+  <div class="field">
+    <label>Tableau Context</label>
+    <div id="contextBadge" class="context-badge">Loading…</div>
+  </div>
+
+  <button class="submit-btn" id="submitBtn" onclick="submitIssue()">Submit Issue</button>
+
+  <div id="status" class="status"></div>
+
+  <div id="activitySection" class="activity-section">
+    <div class="activity-header">
+      <span>Agent Activity</span>
+      <span id="activityPct">0%</span>
+    </div>
+    <div class="activity-progress-bar">
+      <div id="activityFill" class="activity-progress-fill"></div>
+    </div>
+    <div id="logEntries" class="log-entries"></div>
+    <div id="fixActions" class="fix-actions">
+      <button class="btn-accept" onclick="acceptFix()">Accept</button>
+      <button class="btn-restore" onclick="restoreFix()">Restore</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  let tableauContext = '';
+  let pendingRestoreIssue = null; // issueNumber
+
+  tableau.extensions.initializeAsync().then(() => {
+    const dashboard = tableau.extensions.dashboardContent?.dashboard;
+    if (dashboard) {
+      tableauContext = `Dashboard: ${dashboard.name}`;
+      document.getElementById('contextBadge').textContent = tableauContext;
+
+      const workbookName = dashboard.workbook?.name;
+      if (workbookName) {
+        document.getElementById('workbookName').value = workbookName;
+        document.getElementById('workbookHint').textContent = '● Auto-detected from dashboard';
+        document.getElementById('workbookHint').style.color = '#00696E';
+      }
+    } else {
+      tableauContext = 'No dashboard context';
+      document.getElementById('contextBadge').textContent = tableauContext;
+    }
+  }).catch(() => {
+    tableauContext = 'Running outside Tableau';
+    document.getElementById('contextBadge').textContent = tableauContext + ' (dev mode)';
+  });
+
+  async function submitIssue() {
+    const title       = document.getElementById('issueTitle').value.trim();
+    const category    = document.getElementById('issueCategory').value;
+    const description = document.getElementById('issueBody').value.trim();
+
+    if (!title)       return showStatus('Please enter a title.', 'error');
+    if (!category)    return showStatus('Please select a category.', 'error');
+    if (!description) return showStatus('Please enter a description.', 'error');
+
+    const btn = document.getElementById('submitBtn');
+    btn.disabled = true;
+    btn.textContent = 'Submitting…';
+
+    try {
+      const workbookName = document.getElementById('workbookName').value.trim();
+
+      const res = await fetch('/api/submit-issue', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, category, description, context: tableauContext, workbookName })
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.message || data.error || `HTTP ${res.status}`);
+      }
+
+      showStatus(`Issue <a href="${data.html_url}" target="_blank">#${data.number}</a> created successfully.`, 'success');
+      document.getElementById('issueTitle').value = '';
+      document.getElementById('issueBody').value = '';
+      document.getElementById('issueCategory').value = '';
+
+      startProgressTracking(data.number);
+    } catch (e) {
+      showStatus(`Error: ${e.message}`, 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Submit Issue';
+    }
+  }
+
+  let resolveTimer = null;
+  document.getElementById('workbookPath').addEventListener('input', (e) => {
+    clearTimeout(resolveTimer);
+    const val = e.target.value.trim();
+    const hint = document.getElementById('workbookHint');
+    if (!val) { hint.textContent = ''; return; }
+
+    if (val.startsWith('/') && (val.endsWith('.twbx') || val.endsWith('.twb'))) {
+      hint.textContent = '';
+      return;
+    }
+
+    hint.textContent = 'Searching…';
+    hint.style.color = '#6B7A8D';
+    resolveTimer = setTimeout(() => {
+      const name = val.replace(/\.(twbx|twb)$/i, '');
+      fetch(`/api/find-workbook?name=${encodeURIComponent(name)}`)
+        .then(r => r.json())
+        .then(data => {
+          if (data.path) {
+            e.target.value = data.path;
+            e.target.style.color = '#1A2B3C';
+            hint.style.color = '#00696E';
+            hint.textContent = '● Found';
+          } else {
+            hint.style.color = '#b83010';
+            hint.textContent = '● Not found — try a different name';
+          }
+        })
+        .catch(() => { hint.textContent = ''; });
+    }, 400);
+  });
+
+  function startProgressTracking(issueNumber) {
+    const section  = document.getElementById('activitySection');
+    const fill     = document.getElementById('activityFill');
+    const pctEl    = document.getElementById('activityPct');
+    const logEl    = document.getElementById('logEntries');
+    let lastEntry  = null;
+
+    section.classList.add('visible');
+
+    function addEntry(step, pct, type) {
+      const now  = new Date();
+      const time = now.toTimeString().slice(0, 8);
+
+      // Remove pulsing from previous active entry
+      if (lastEntry) lastEntry.classList.remove('log-active');
+
+      const entry = document.createElement('div');
+      const cls   = type === 'ok' ? 'log-ok' : type === 'error' ? 'log-error' : type === 'warn' ? 'log-warn' : 'log-info';
+      entry.className = `log-entry ${cls}${pct < 100 ? ' log-active' : ''}`;
+      entry.innerHTML = `
+        <span class="log-dot"></span>
+        <span class="log-time">${time}</span>
+        <span class="log-text">${step}</span>
+        <span class="log-pct">${pct}%</span>`;
+      logEl.appendChild(entry);
+      logEl.scrollTop = logEl.scrollHeight;
+      lastEntry = entry;
+
+      fill.style.width = pct + '%';
+      pctEl.textContent = pct + '%';
+      if (pct >= 100) fill.classList.add('done');
+    }
+
+    const es = new EventSource(`/api/progress/${issueNumber}`);
+    es.onmessage = (e) => {
+      const { step, pct, type, originalPath, backupPath } = JSON.parse(e.data);
+      addEntry(step, pct, type || 'info');
+      if (pct >= 100) {
+        es.close();
+        if (type === 'ok' && hasBackup && issueNumber) {
+          pendingRestoreIssue = issueNumber;
+          document.getElementById('fixActions').classList.add('visible');
+        }
+      }
+    };
+    es.onerror = () => es.close();
+  }
+
+  function acceptFix() {
+    document.getElementById('fixActions').classList.remove('visible');
+    pendingRestoreIssue = null;
+    showStatus('Thank you, your case has been logged as closed.', 'success');
+  }
+
+  async function restoreFix() {
+    if (!pendingRestoreIssue) return;
+    const btn = document.querySelector('.btn-restore');
+    btn.textContent = 'Restoring…';
+    btn.disabled = true;
+    showStatus('Reverting back to previous state…', 'success');
+    try {
+      await fetch('/api/restore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ issueNumber: pendingRestoreIssue })
+      });
+      document.getElementById('fixActions').classList.remove('visible');
+      pendingRestoreIssue = null;
+    } catch (e) {
+      btn.textContent = 'Restore';
+      btn.disabled = false;
+      showStatus('Restore failed: ' + e.message, 'error');
+    }
+  }
+
+  function showStatus(msg, type) {
+    const el = document.getElementById('status');
+    el.innerHTML = msg;
+    el.className = `status ${type}`;
+  }
+</script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+{
+  "name": "tableau-self-service-support",
+  "version": "1.0.0",
+  "description": "Tableau extension that logs support issues to GitHub and auto-fixes workbooks",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "agent": "node agent.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "adm-zip": "^0.5.16",
+    "smee-client": "^5.0.0"
+  }
+}
