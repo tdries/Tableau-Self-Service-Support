@@ -444,6 +444,11 @@
     <textarea id="issueBody" placeholder="Describe the issue in detail. Include steps to reproduce, expected vs actual behavior, etc."></textarea>
   </div>
 
+  <div class="field">
+    <label>Workbook</label>
+    <div id="workbookLabel" class="context-badge">Detecting…</div>
+  </div>
+
   <button class="submit-btn" id="submitBtn" onclick="submitIssue()">Submit Issue</button>
 
   <div id="status" class="status"></div>
@@ -503,11 +508,14 @@
     if (dashboard) {
       tableauContext = `Dashboard: ${dashboard.name}`;
       detectedWorkbookName = dashboard.workbook?.name || '';
+      document.getElementById('workbookLabel').textContent = detectedWorkbookName || 'Unknown';
     } else {
       tableauContext = 'No dashboard context';
+      document.getElementById('workbookLabel').textContent = 'Not detected';
     }
   }).catch(() => {
     tableauContext = 'Running outside Tableau';
+    document.getElementById('workbookLabel').textContent = 'Not in Tableau';
   });
 
   async function submitIssue() {
