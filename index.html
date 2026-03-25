@@ -530,12 +530,13 @@
         throw new Error(data.message || data.error || `HTTP ${res.status}`);
       }
 
+      const submittedTitle = document.getElementById('issueTitle').value.trim();
       showStatus(`Issue <a href="${data.html_url}" target="_blank">#${data.number}</a> created successfully.`, 'success');
       document.getElementById('issueTitle').value = '';
       document.getElementById('issueBody').value = '';
       document.getElementById('issueCategory').value = '';
 
-      startProgressTracking(data.number);
+      startProgressTracking(data.number, submittedTitle);
     } catch (e) {
       showStatus(`Error: ${e.message}`, 'error');
     } finally {
@@ -544,7 +545,7 @@
     }
   }
 
-  function startProgressTracking(issueNumber) {
+  function startProgressTracking(issueNumber, issueTitle) {
     const section  = document.getElementById('activitySection');
     const fill     = document.getElementById('activityFill');
     const pctEl    = document.getElementById('activityPct');
@@ -554,7 +555,7 @@
     section.classList.add('visible');
 
     // Fetch a GIF based on the issue title
-    const query = document.getElementById('issueTitle').value.trim() || 'loading';
+    const query = issueTitle || 'fix it';
     fetch(`/api/gif?q=${encodeURIComponent(query)}`)
       .then(r => r.json())
       .then(({ url }) => {
