@@ -559,13 +559,13 @@
 
     const es = new EventSource(`/api/progress/${issueNumber}`);
     es.onmessage = (e) => {
-      const { step, pct, type, originalPath, backupPath } = JSON.parse(e.data);
+      const { step, pct, type, hasBackup, issueNumber: issNum } = JSON.parse(e.data);
       addEntry(step, pct, type || 'info');
       if (pct >= 100) {
         es.close();
-        if (type === 'ok' && hasBackup && issueNumber) {
-          pendingRestoreIssue = issueNumber;
-          localStorage.setItem('pendingRestoreIssue', issueNumber);
+        if (type === 'ok' && hasBackup && issNum) {
+          pendingRestoreIssue = issNum;
+          localStorage.setItem('pendingRestoreIssue', issNum);
           document.getElementById('fixActions').classList.add('visible');
         }
       }
