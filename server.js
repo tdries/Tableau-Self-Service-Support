@@ -25,9 +25,8 @@ const REPO         = 'tdries/Tableau-Self-Service-Support';
 const PORT         = parseInt(process.env.PORT || env.PORT || '8766');
 const JIRA_TOKEN   = e('TAB_SUPPORT_AI_FULL') || e('TAB_SUPPORT_AI');
 const JIRA_EMAIL   = e('JIRA_EMAIL');
-const JIRA_BOARD   = e('JIRA_BOARD'); // e.g. https://biztory.atlassian.net/jira/servicedesk/projects/BTSA/boards/181
-const JIRA_HOST    = JIRA_BOARD ? new URL(JIRA_BOARD).hostname : 'biztory.atlassian.net';
-const JIRA_PROJECT = JIRA_BOARD ? (JIRA_BOARD.match(/\/projects\/([^/]+)/) || [])[1] || 'BTSA' : 'BTSA';
+const JIRA_HOST    = 'biztory.atlassian.net';
+const JIRA_PROJECT = 'BTSA'; // locked — issues may only ever be created on this board
 
 // ---- smee.io webhook tunnel (forwards GitHub webhooks to localhost) ----
 if (SMEE_URL) {
@@ -135,9 +134,10 @@ function jiraRequest(method, path, body, callback) {
 // ---- Jira Issues proxy ----
 function createJiraIssue(payload, callback) {
   const { title, description } = payload;
+  if (JIRA_PROJECT !== 'BTSA') return callback(new Error('Jira writes are locked to project BTSA only'));
   jiraRequest('POST', '/rest/api/3/issue', {
     fields: {
-      project:     { key: JIRA_PROJECT },
+      project:     { key: 'BTSA' },
       summary:     title,
       description: { type: 'doc', version: 1, content: [{ type: 'paragraph', content: [{ type: 'text', text: description }] }] },
       issuetype:   { name: 'Submit a request or incident' }
