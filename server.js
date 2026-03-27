@@ -11,7 +11,7 @@ function loadEnv() {
     return Object.fromEntries(
       raw.split('\n')
         .filter(l => l.trim() && !l.startsWith('#'))
-        .map(l => { const i = l.indexOf('='); return [l.slice(0,i).trim(), l.slice(i+1).trim()]; })
+        .map(l => { const i = l.indexOf('='); const v = l.slice(i+1).trim(); return [l.slice(0,i).trim(), v.replace(/^["']|["']$/g, '')]; })
     );
   } catch { return {}; }
 }
@@ -131,6 +131,7 @@ function createJiraIssue(payload, callback) {
     res.on('end', () => {
       try {
         const parsed = JSON.parse(data);
+        if (res.statusCode >= 400) console.error(`[Jira] ${res.statusCode}:`, JSON.stringify(parsed));
         callback(null, res.statusCode, parsed);
       } catch (e) { callback(e); }
     });
@@ -274,7 +275,11 @@ const server = http.createServer((req, res) => {
       if (destination === 'jira') {
         createJiraIssue({ title, description: fullDescription, category }, (err, status, data) => {
           if (err) { res.writeHead(500); return res.end(JSON.stringify({ error: err.message })); }
-          if (status >= 400) { res.writeHead(status, { 'Content-Type': 'application/json' }); return res.end(JSON.stringify(data)); }
+          if (status >= 400) {
+            const msg = (data.errorMessages && data.errorMessages[0]) || JSON.stringify(data.errors || data);
+            res.writeHead(status, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ error: msg }));
+          }
           const issueUrl = `https://${JIRA_HOST}/browse/${data.key}`;
           res.writeHead(201, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ key: data.key, html_url: issueUrl }));
