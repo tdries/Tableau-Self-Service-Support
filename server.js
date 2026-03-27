@@ -42,8 +42,9 @@ if (!GITHUB_TOKEN) {
 }
 
 // ---- Agent trigger / restore queues ----
-const pendingTriggers = [];
-const pendingRestores = [];
+const pendingTriggers     = [];
+const pendingRestores     = [];
+const pendingJiraTriggers = [];
 
 // ---- SSE progress hub ----
 // Clients: issueNumber -> Set<res>
@@ -288,6 +289,9 @@ const server = http.createServer((req, res) => {
           const issueUrl = `https://${JIRA_HOST}/browse/${issueKey}`;
           res.writeHead(201, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ key: issueKey, html_url: issueUrl }));
+
+          ssePush(issueKey, { step: `Issue ${issueKey} logged in Jira`, pct: 5, type: 'ok' });
+          pendingJiraTriggers.push(issueKey);
         });
         return;
       }
@@ -312,6 +316,16 @@ const server = http.createServer((req, res) => {
     if (issueNumber) {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       return res.end(JSON.stringify({ issueNumber }));
+    }
+    res.writeHead(204); return res.end();
+  }
+
+  // --- GET /api/next-jira-trigger  (agent polls this) ---
+  if (req.method === 'GET' && url.pathname === '/api/next-jira-trigger') {
+    const issueKey = pendingJiraTriggers.shift();
+    if (issueKey) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ issueKey }));
     }
     res.writeHead(204); return res.end();
   }

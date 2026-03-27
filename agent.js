@@ -26,6 +26,9 @@ const e = k => env[k] || process.env[k] || '';
 
 const GITHUB_TOKEN       = e('api') || e('GITHUB_TOKEN') || e('GH_TOKEN');
 const ANTHROPIC_KEY      = e('ANTHROPIC_API_KEY');
+const JIRA_TOKEN         = (e('TAB_SUPPORT_AI_FULL') || e('TAB_SUPPORT_AI')).replace(/^["']|["']$/g, '');
+const JIRA_EMAIL         = e('JIRA_EMAIL');
+const JIRA_HOST          = 'biztory.atlassian.net';
 const TABLEAU_URL        = (e('Tableau_URL') || 'https://10ax.online.tableau.com').replace(/\/$/, '');
 const TABLEAU_SITE       = e('Site') || '';
 const TABLEAU_PAT_NAME   = e('TABLEAU_PAT_NAME') || 'test2';
@@ -80,6 +83,35 @@ function gh(method, endpoint, body) {
       ...(data ? { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) } : {})
     }
   }, data);
+}
+
+// ---- Jira API ----
+function jira(method, endpoint, body) {
+  const auth = Buffer.from(`${JIRA_EMAIL}:${JIRA_TOKEN}`).toString('base64');
+  const data = body ? JSON.stringify(body) : null;
+  return httpReq({
+    hostname: JIRA_HOST,
+    path: endpoint,
+    method,
+    headers: {
+      'Authorization': `Basic ${auth}`,
+      'Accept': 'application/json',
+      ...(data ? { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) } : {})
+    }
+  }, data);
+}
+
+function jiraComment(issueKey, text) {
+  return jira('POST', `/rest/api/3/issue/${issueKey}/comment`, {
+    body: { type: 'doc', version: 1, content: [{ type: 'paragraph', content: [{ type: 'text', text }] }] }
+  });
+}
+
+function adfToText(node) {
+  if (!node) return '';
+  if (node.type === 'text') return node.text || '';
+  if (node.content) return node.content.map(adfToText).join('\n');
+  return '';
 }
 
 // ---- Tableau REST API ----
@@ -235,67 +267,8 @@ function hasFixAppliedLabel(issue) {
   return issue.labels?.some(l => l.name === 'fix-applied');
 }
 
-// ---- Core: analyze + fix ----
-async function analyzeAndFix(issue) {
-  console.log(`\n[Agent] Issue #${issue.number}: ${issue.title}`);
-  const n = issue.number;
-
-  const workbookName = extractWorkbookName(issue.body);
-  if (!workbookName) {
-    console.log('  → No workbook name in issue, skipping');
-    return;
-  }
-
-  reportProgress(n, 'Issue received — connecting to Tableau Cloud…', 10);
-
-  // Auth + find workbook
-  let token, siteId, workbook;
-  try {
-    ({ token, siteId } = await tableauAuth());
-    console.log('  → Authenticated with Tableau Cloud');
-    workbook = await tableauFindWorkbook(token, siteId, workbookName);
-    console.log(`  → Found: ${workbook.name} (${workbook.id})`);
-  } catch (err) {
-    reportProgress(n, `Error: ${err.message}`, 100, 'error');
-    await gh('POST', `/repos/${REPO}/issues/${n}/comments`, { body: `⚠️ **Agent error:** ${err.message}` });
-    return;
-  }
-
-  // Download workbook
-  let originalBuffer;
-  reportProgress(n, 'Downloading workbook from Tableau Cloud…', 22);
-  try {
-    originalBuffer = await tableauDownload(token, siteId, workbook.id);
-    console.log(`  → Downloaded (${Math.round(originalBuffer.length / 1024)}KB)`);
-  } catch (err) {
-    reportProgress(n, `Error: ${err.message}`, 100, 'error');
-    await gh('POST', `/repos/${REPO}/issues/${n}/comments`, { body: `⚠️ **Could not download workbook:** ${err.message}` });
-    return;
-  }
-
-  // Unpack XML
-  let wb;
-  reportProgress(n, 'Reading workbook…', 30);
-  try {
-    wb = unpackWorkbook(originalBuffer);
-    console.log(`  → Unpacked XML (${Math.round(wb.twbXml.length / 1024)}KB)`);
-  } catch (err) {
-    reportProgress(n, `Error: ${err.message}`, 100, 'error');
-    await gh('POST', `/repos/${REPO}/issues/${n}/comments`, { body: `⚠️ **Could not read workbook:** ${err.message}` });
-    return;
-  }
-
-  const relevantXml = extractRelevantXml(wb.twbXml);
-
-  // BUDA analysis
-  reportProgress(n, 'The Biztory AI Developer Junio (BUDA) is looking at the issue…', 45);
-  console.log('  → Calling Biztory AI...');
-  let result;
-  try {
-    const msg = await anthropic.messages.create({
-      model: 'claude-opus-4-6',
-      max_tokens: 8096,
-      system: `You are BUDA, an expert Tableau workbook engineer and automated repair agent. You edit TWB/TWBX XML files with surgical precision based on the official Tableau 2026.1 schema.
+// ---- Shared BUDA system prompt ----
+const BUDA_SYSTEM = `You are BUDA, an expert Tableau workbook engineer and automated repair agent. You edit TWB/TWBX XML files with surgical precision based on the official Tableau 2026.1 schema.
 
 ## WORKBOOK TOP-LEVEL STRUCTURE
 \`\`\`xml
@@ -412,7 +385,69 @@ Zone rules — violating these causes HTTP 400 on publish:
 - Preserve the exact quoting style (' vs ") of surrounding XML
 - When fixing a calculated field, only change the \`formula='...'\` attribute value
 - New worksheets MUST have a unique \`<simple-id uuid='...'>\` — generate a valid UUID
-- New dashboard zones MUST have unique \`id\` values — scan existing ids first`,
+- New dashboard zones MUST have unique \`id\` values — scan existing ids first`;
+
+// ---- Core: analyze + fix ----
+async function analyzeAndFix(issue) {
+  console.log(`\n[Agent] Issue #${issue.number}: ${issue.title}`);
+  const n = issue.number;
+
+  const workbookName = extractWorkbookName(issue.body);
+  if (!workbookName) {
+    console.log('  → No workbook name in issue, skipping');
+    return;
+  }
+
+  reportProgress(n, 'Issue received — connecting to Tableau Cloud…', 10);
+
+  // Auth + find workbook
+  let token, siteId, workbook;
+  try {
+    ({ token, siteId } = await tableauAuth());
+    console.log('  → Authenticated with Tableau Cloud');
+    workbook = await tableauFindWorkbook(token, siteId, workbookName);
+    console.log(`  → Found: ${workbook.name} (${workbook.id})`);
+  } catch (err) {
+    reportProgress(n, `Error: ${err.message}`, 100, 'error');
+    await gh('POST', `/repos/${REPO}/issues/${n}/comments`, { body: `⚠️ **Agent error:** ${err.message}` });
+    return;
+  }
+
+  // Download workbook
+  let originalBuffer;
+  reportProgress(n, 'Downloading workbook from Tableau Cloud…', 22);
+  try {
+    originalBuffer = await tableauDownload(token, siteId, workbook.id);
+    console.log(`  → Downloaded (${Math.round(originalBuffer.length / 1024)}KB)`);
+  } catch (err) {
+    reportProgress(n, `Error: ${err.message}`, 100, 'error');
+    await gh('POST', `/repos/${REPO}/issues/${n}/comments`, { body: `⚠️ **Could not download workbook:** ${err.message}` });
+    return;
+  }
+
+  // Unpack XML
+  let wb;
+  reportProgress(n, 'Reading workbook…', 30);
+  try {
+    wb = unpackWorkbook(originalBuffer);
+    console.log(`  → Unpacked XML (${Math.round(wb.twbXml.length / 1024)}KB)`);
+  } catch (err) {
+    reportProgress(n, `Error: ${err.message}`, 100, 'error');
+    await gh('POST', `/repos/${REPO}/issues/${n}/comments`, { body: `⚠️ **Could not read workbook:** ${err.message}` });
+    return;
+  }
+
+  const relevantXml = extractRelevantXml(wb.twbXml);
+
+  // BUDA analysis
+  reportProgress(n, 'The Biztory AI Developer Junio (BUDA) is looking at the issue…', 45);
+  console.log('  → Calling Biztory AI...');
+  let result;
+  try {
+    const msg = await anthropic.messages.create({
+      model: 'claude-opus-4-6',
+      max_tokens: 8096,
+      system: BUDA_SYSTEM,
 
       messages: [{
         role: 'user',
@@ -540,6 +575,183 @@ Omit \`replace\` for delete ops, omit \`insert\` for replace ops. Return empty f
   console.log(`  → Done. Issue #${n} marked fix-applied.`);
 }
 
+// ---- Jira: analyze + fix ----
+const seenJira = new Set();
+
+async function analyzeAndFixJira(issueKey) {
+  if (seenJira.has(issueKey)) return;
+  seenJira.add(issueKey);
+  console.log(`\n[Agent] Jira ${issueKey}`);
+
+  // Fetch issue
+  reportProgress(issueKey, 'Fetching Jira issue…', 5);
+  let issue;
+  try {
+    const { body, status } = await jira('GET', `/rest/api/3/issue/${issueKey}`);
+    if (status >= 400) throw new Error(`HTTP ${status}`);
+    issue = body;
+  } catch (err) {
+    reportProgress(issueKey, `Failed to fetch issue: ${err.message}`, 100, 'error');
+    return;
+  }
+
+  const title    = issue.fields.summary;
+  const descText = adfToText(issue.fields.description);
+
+  // Step 1 — interpretation comment
+  reportProgress(issueKey, 'Interpreting issue…', 8);
+  let interpretation;
+  try {
+    const msg = await anthropic.messages.create({
+      model: 'claude-opus-4-6',
+      max_tokens: 300,
+      messages: [{ role: 'user', content:
+        `You are BUDA, a Biztory Tableau support AI. A user submitted this issue:\n\nTitle: ${title}\nDescription: ${descText.slice(0, 800)}\n\nWrite a brief, professional comment (2-3 sentences) that: restates how you understand the problem, and confirms you are now starting to work on it.`
+      }]
+    });
+    interpretation = msg.content[0].text.trim();
+  } catch {
+    interpretation = `Hi, I've received your issue "${title}" and I'm starting to analyze it now.`;
+  }
+
+  await jiraComment(issueKey, interpretation);
+  reportProgress(issueKey, 'Response posted — connecting to Tableau Cloud…', 12);
+
+  // Extract workbook name
+  const workbookName = extractWorkbookName(descText);
+  if (!workbookName) {
+    reportProgress(issueKey, 'No workbook name found in issue', 100, 'warn');
+    await jiraComment(issueKey, 'I could not find a workbook name in your issue. Please resubmit and include the workbook name.');
+    return;
+  }
+
+  // Auth + find workbook
+  let token, siteId, workbook;
+  try {
+    ({ token, siteId } = await tableauAuth());
+    workbook = await tableauFindWorkbook(token, siteId, workbookName);
+    console.log(`  → Found: ${workbook.name} (${workbook.id})`);
+  } catch (err) {
+    reportProgress(issueKey, `Error: ${err.message}`, 100, 'error');
+    await jiraComment(issueKey, `Agent error: ${err.message}`);
+    return;
+  }
+
+  // Download
+  let originalBuffer;
+  reportProgress(issueKey, 'Downloading workbook from Tableau Cloud…', 22);
+  try {
+    originalBuffer = await tableauDownload(token, siteId, workbook.id);
+    console.log(`  → Downloaded (${Math.round(originalBuffer.length / 1024)}KB)`);
+  } catch (err) {
+    reportProgress(issueKey, `Error: ${err.message}`, 100, 'error');
+    await jiraComment(issueKey, `Could not download workbook: ${err.message}`);
+    return;
+  }
+
+  // Unpack
+  let wb;
+  reportProgress(issueKey, 'Reading workbook…', 30);
+  try {
+    wb = unpackWorkbook(originalBuffer);
+    console.log(`  → Unpacked XML (${Math.round(wb.twbXml.length / 1024)}KB)`);
+  } catch (err) {
+    reportProgress(issueKey, `Error: ${err.message}`, 100, 'error');
+    await jiraComment(issueKey, `Could not read workbook: ${err.message}`);
+    return;
+  }
+
+  const relevantXml = extractRelevantXml(wb.twbXml);
+
+  // BUDA analysis
+  reportProgress(issueKey, 'BUDA is analyzing the workbook…', 45);
+  let result;
+  try {
+    const msg = await anthropic.messages.create({
+      model: 'claude-opus-4-6',
+      max_tokens: 8096,
+      system: BUDA_SYSTEM,
+      messages: [{ role: 'user', content:
+        `A user submitted the following Tableau support issue:\n\n**Title:** ${title}\n**Description:**\n${descText.split('---')[0].trim()}\n\nKey XML sections extracted from the workbook:\n\n\`\`\`xml\n${relevantXml}\n\`\`\`\n\nDiagnose the root cause and return the fix. Respond ONLY with a valid JSON object (no markdown outside it):\n{\n  "analysis": "One-sentence root cause",\n  "fixes": [\n    { "op": "replace|insert_after|delete", "find": "verbatim XML to locate", "replace": "...", "insert": "..." }\n  ],\n  "comment": "Human-readable summary of what was changed and what the user should do next"\n}\n\nOmit \`replace\` for delete ops, omit \`insert\` for replace ops. Return empty fixes array if no safe fix is possible.`
+      }]
+    });
+    const text = msg.content[0].text.trim();
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error('No JSON in response');
+    result = JSON.parse(jsonMatch[0]);
+  } catch (err) {
+    reportProgress(issueKey, `Error: ${err.message}`, 100, 'error');
+    await jiraComment(issueKey, `Agent error during analysis: ${err.message}`);
+    return;
+  }
+
+  console.log(`  → Analysis: ${result.analysis}`);
+
+  if (!result.fixes || result.fixes.length === 0) {
+    reportProgress(issueKey, 'No automatic fix found — manual review needed', 100, 'warn');
+    await jiraComment(issueKey, `No automatic fix applied.\n\n${result.analysis}\n\n${result.comment || ''}`);
+    return;
+  }
+
+  // Apply fixes
+  reportProgress(issueKey, 'Applying fix to workbook…', 65);
+  let xml = wb.twbXml;
+  let applied = 0;
+  const log = [];
+
+  for (const fix of result.fixes) {
+    const op     = fix.op || 'replace';
+    const anchor = fix.find ? fix.find.slice(0, 80) + (fix.find.length > 80 ? '…' : '') : '';
+    if (!fix.find || !xml.includes(fix.find)) { log.push(`Not found (${op}): ${anchor}`); continue; }
+    if      (op === 'replace')      xml = xml.split(fix.find).join(fix.replace);
+    else if (op === 'insert_after') xml = xml.split(fix.find).join(fix.find + fix.insert);
+    else if (op === 'delete')       xml = xml.split(fix.find).join('');
+    else { log.push(`Unknown op: ${op}`); continue; }
+    applied++;
+    log.push(`Applied ${op}: ${anchor}`);
+  }
+
+  if (applied === 0) {
+    reportProgress(issueKey, 'Fix could not be located in workbook XML', 100, 'warn');
+    await jiraComment(issueKey, `Fix identified but could not be applied.\n\nAnalysis: ${result.analysis}\n\n${log.join('\n')}`);
+    return;
+  }
+
+  // Validate
+  reportProgress(issueKey, 'Validating XML…', 75);
+  const validation = validateXml(xml);
+  if (!validation.valid) {
+    reportProgress(issueKey, 'Fix produced invalid XML — not applied', 100, 'error');
+    await jiraComment(issueKey, `Fix produced invalid XML and was not applied.\n\n${validation.error}`);
+    return;
+  }
+
+  // Repack
+  reportProgress(issueKey, 'Repacking workbook…', 82);
+  let fixedBuffer;
+  try {
+    fixedBuffer = repackWorkbook(xml, wb.zip, wb.twbEntryName);
+  } catch (err) {
+    reportProgress(issueKey, `Error repacking: ${err.message}`, 100, 'error');
+    return;
+  }
+
+  // Publish
+  reportProgress(issueKey, 'Publishing fixed workbook to Tableau Cloud…', 90);
+  try {
+    await tableauPublish(token, siteId, workbook.project.id, workbook.name, fixedBuffer);
+    console.log('  → Published to Tableau Cloud');
+  } catch (err) {
+    reportProgress(issueKey, `Error publishing: ${err.message}`, 100, 'error');
+    await jiraComment(issueKey, `Fix generated but publishing failed: ${err.message}`);
+    return;
+  }
+
+  await jiraComment(issueKey, `Fix applied automatically by BUDA.\n\n${result.comment}\n\nChanges (${applied}/${result.fixes.length}):\n${log.join('\n')}\n\nThe workbook has been republished to Tableau Cloud. Reload your dashboard to see the changes.`);
+  reportProgress(issueKey, 'Fix published — reload your dashboard', 100, 'ok');
+  console.log(`  → Done. ${issueKey} fixed.`);
+}
+
 // ---- Restore handler ----
 async function handleRestore(issueNumber) {
   const backup = backups.get(issueNumber);
@@ -588,6 +800,11 @@ async function pollServer() {
           analyzeAndFix(issue);
         }
       }).catch(err => console.error(`[Agent] trigger error: ${err.message}`));
+    }
+
+    const jiraTrigger = await poll('/api/next-jira-trigger');
+    if (jiraTrigger.status === 200 && jiraTrigger.body?.issueKey) {
+      analyzeAndFixJira(jiraTrigger.body.issueKey).catch(err => console.error(`[Agent] Jira error: ${err.message}`));
     }
 
     const restore = await poll('/api/next-restore');

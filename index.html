@@ -552,6 +552,8 @@
 
       if (destination === 'github' && data.number) {
         startProgressTracking(data.number, submittedTitle);
+      } else if (destination === 'jira' && data.key) {
+        startProgressTracking(data.key, submittedTitle);
       }
     } catch (e) {
       showStatus(`Error: ${e.message}`, 'error');
