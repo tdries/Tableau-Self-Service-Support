@@ -42,6 +42,24 @@ if (!TABLEAU_PAT_SECRET) { console.error('[ERROR] Tableau PAT secret missing (se
 
 const anthropic = new Anthropic({ apiKey: ANTHROPIC_KEY });
 const seen    = new Set();
+
+// ---- Anthropic call with retry on 529 overload ----
+async function claudeCreate(params, retries = 4) {
+  for (let i = 0; i <= retries; i++) {
+    try {
+      return await anthropic.messages.create(params);
+    } catch (err) {
+      const is529 = err?.status === 529 || String(err?.message).includes('overloaded');
+      if (is529 && i < retries) {
+        const wait = 15000 * (i + 1); // 15s, 30s, 45s, 60s
+        console.log(`  [Claude] 529 overloaded — retrying in ${wait / 1000}s (attempt ${i + 1}/${retries})`);
+        await new Promise(r => setTimeout(r, wait));
+      } else {
+        throw err;
+      }
+    }
+  }
+}
 const backups = new Map(); // issueNumber -> { workbookId, projectId, name, originalBuffer }
 
 // ---- Generic HTTP/HTTPS helper ----
@@ -444,7 +462,7 @@ async function analyzeAndFix(issue) {
   console.log('  → Calling Biztory AI...');
   let result;
   try {
-    const msg = await anthropic.messages.create({
+    const msg = await claudeCreate({
       model: 'claude-opus-4-6',
       max_tokens: 8096,
       system: BUDA_SYSTEM,
@@ -602,7 +620,7 @@ async function analyzeAndFixJira(issueKey) {
   reportProgress(issueKey, 'Interpreting issue…', 8);
   let interpretation;
   try {
-    const msg = await anthropic.messages.create({
+    const msg = await claudeCreate({
       model: 'claude-opus-4-6',
       max_tokens: 300,
       messages: [{ role: 'user', content:
@@ -667,7 +685,7 @@ async function analyzeAndFixJira(issueKey) {
   reportProgress(issueKey, 'BUDA is analyzing the workbook…', 45);
   let result;
   try {
-    const msg = await anthropic.messages.create({
+    const msg = await claudeCreate({
       model: 'claude-opus-4-6',
       max_tokens: 8096,
       system: BUDA_SYSTEM,
