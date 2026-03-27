@@ -418,8 +418,16 @@
 
 <div class="container">
   <div class="card-title">Biztory 1st level Tableau AI Support</div>
-  <div class="card-subtitle">Submit a request directly as a GitHub Issue</div>
+  <div class="card-subtitle">Submit a request to your preferred issue tracker</div>
   <hr class="divider" />
+
+  <div class="field">
+    <label>Log to</label>
+    <select id="issueDestination">
+      <option value="github">GitHub Issues</option>
+      <option value="jira">Jira Board</option>
+    </select>
+  </div>
 
   <div class="field">
     <label>Title</label>
@@ -506,22 +514,24 @@
     const title       = document.getElementById('issueTitle').value.trim();
     const category    = document.getElementById('issueCategory').value;
     const description = document.getElementById('issueBody').value.trim();
+    const workbookName = document.getElementById('workbookUrl').value.trim();
+    const destination = document.getElementById('issueDestination').value;
 
-    if (!title)       return showStatus('Please enter a title.', 'error');
-    if (!category)    return showStatus('Please select a category.', 'error');
-    if (!description) return showStatus('Please enter a description.', 'error');
+    if (!title)        return showStatus('Please enter a title.', 'error');
+    if (!category)     return showStatus('Please select a category.', 'error');
+    if (!description)  return showStatus('Please enter a description.', 'error');
+    if (!workbookName) return showStatus('Please enter a workbook name.', 'error');
 
     const btn = document.getElementById('submitBtn');
     btn.disabled = true;
     btn.textContent = 'Submitting…';
 
     try {
-      const workbookName = document.getElementById('workbookUrl').value.trim();
-
+      const submittedTitle = title;
       const res = await fetch('/api/submit-issue', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, category, description, context: tableauContext, workbookName })
+        body: JSON.stringify({ title, category, description, context: tableauContext, workbookName, destination })
       });
 
       const data = await res.json();
@@ -530,13 +540,19 @@
         throw new Error(data.message || data.error || `HTTP ${res.status}`);
       }
 
-      const submittedTitle = document.getElementById('issueTitle').value.trim();
-      showStatus(`Issue <a href="${data.html_url}" target="_blank">#${data.number}</a> created successfully.`, 'success');
+      if (destination === 'jira') {
+        showStatus(`Jira issue <a href="${data.html_url}" target="_blank">${data.key}</a> created successfully.`, 'success');
+      } else {
+        showStatus(`Issue <a href="${data.html_url}" target="_blank">#${data.number}</a> created successfully.`, 'success');
+      }
+
       document.getElementById('issueTitle').value = '';
       document.getElementById('issueBody').value = '';
       document.getElementById('issueCategory').value = '';
 
-      startProgressTracking(data.number, submittedTitle);
+      if (destination === 'github' && data.number) {
+        startProgressTracking(data.number, submittedTitle);
+      }
     } catch (e) {
       showStatus(`Error: ${e.message}`, 'error');
     } finally {
