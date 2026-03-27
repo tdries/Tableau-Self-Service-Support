@@ -23,6 +23,11 @@ const GIPHY_KEY    = e('GIPHY_API_KEY');
 const SMEE_URL     = e('SMEE_URL');
 const REPO         = 'tdries/Tableau-Self-Service-Support';
 const PORT         = parseInt(process.env.PORT || env.PORT || '8766');
+const JIRA_TOKEN   = e('TAB_SUPPORT_AI');
+const JIRA_EMAIL   = e('JIRA_EMAIL');
+const JIRA_BOARD   = e('JIRA_BOARD'); // e.g. https://biztory.atlassian.net/jira/servicedesk/projects/BTSA/boards/181
+const JIRA_HOST    = JIRA_BOARD ? new URL(JIRA_BOARD).hostname : 'biztory.atlassian.net';
+const JIRA_PROJECT = JIRA_BOARD ? (JIRA_BOARD.match(/\/projects\/([^/]+)/) || [])[1] || 'BTSA' : 'BTSA';
 
 // ---- smee.io webhook tunnel (forwards GitHub webhooks to localhost) ----
 if (SMEE_URL) {
@@ -95,6 +100,44 @@ function ssePush(issueNumber, payload) {
       sseBuffer.delete(key);
     }, 2000);
   }
+}
+
+// ---- Jira Issues proxy ----
+function createJiraIssue(payload, callback) {
+  const { title, description, category } = payload;
+  const body = JSON.stringify({
+    fields: {
+      project:   { key: JIRA_PROJECT },
+      summary:   title,
+      description: { type: 'doc', version: 1, content: [{ type: 'paragraph', content: [{ type: 'text', text: description }] }] },
+      issuetype: { name: 'Task' },
+      ...(category ? { labels: [category] } : {})
+    }
+  });
+  const auth = Buffer.from(`${JIRA_EMAIL}:${JIRA_TOKEN}`).toString('base64');
+  const req = https.request({
+    hostname: JIRA_HOST,
+    path: '/rest/api/3/issue',
+    method: 'POST',
+    headers: {
+      'Authorization': `Basic ${auth}`,
+      'Content-Type':  'application/json',
+      'Content-Length': Buffer.byteLength(body),
+      'Accept':        'application/json'
+    }
+  }, (res) => {
+    let data = '';
+    res.on('data', chunk => data += chunk);
+    res.on('end', () => {
+      try {
+        const parsed = JSON.parse(data);
+        callback(null, res.statusCode, parsed);
+      } catch (e) { callback(e); }
+    });
+  });
+  req.on('error', err => callback(err));
+  req.write(body);
+  req.end();
 }
 
 // ---- GitHub Issues proxy ----
@@ -219,16 +262,27 @@ const server = http.createServer((req, res) => {
         return res.end(JSON.stringify({ error: 'Invalid JSON' }));
       }
 
-      const { title, category, description, context, workbookName } = parsed;
+      const { title, category, description, context, workbookName, destination } = parsed;
       if (!title || !description) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         return res.end(JSON.stringify({ error: 'title and description are required' }));
       }
 
       const workbookLine = workbookName ? `\n\n**Workbook:** ${workbookName}` : '';
-      const issueBody = `${description}${workbookLine}\n\n---\n_Submitted via Tableau Self-Service Support extension_\n_${context || 'No Tableau context'}_`;
+      const fullDescription = `${description}${workbookLine}\n\n---\n_Submitted via Tableau Self-Service Support extension_\n_${context || 'No Tableau context'}_`;
 
-      createIssue({ title, body: issueBody, labels: category ? [category] : [] }, (err, status, data) => {
+      if (destination === 'jira') {
+        createJiraIssue({ title, description: fullDescription, category }, (err, status, data) => {
+          if (err) { res.writeHead(500); return res.end(JSON.stringify({ error: err.message })); }
+          if (status >= 400) { res.writeHead(status, { 'Content-Type': 'application/json' }); return res.end(JSON.stringify(data)); }
+          const issueUrl = `https://${JIRA_HOST}/browse/${data.key}`;
+          res.writeHead(201, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ key: data.key, html_url: issueUrl }));
+        });
+        return;
+      }
+
+      createIssue({ title, body: fullDescription, labels: category ? [category] : [] }, (err, status, data) => {
         if (err) { res.writeHead(500); return res.end(JSON.stringify({ error: err.message })); }
         res.writeHead(status, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(data));
