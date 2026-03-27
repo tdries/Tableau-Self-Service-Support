@@ -137,8 +137,9 @@ function createJiraIssue(payload, callback) {
   const { title, description } = payload;
 
   // Fetch available issue types for the project first
-  jiraRequest('GET', `/rest/api/3/project/${JIRA_PROJECT}`, null, (err, _status, projectData) => {
+  jiraRequest('GET', `/rest/api/3/project/${JIRA_PROJECT}`, null, (err, status, projectData) => {
     if (err) return callback(err);
+    if (status >= 400) return callback(new Error(`Jira project fetch failed (${status}): ${JSON.stringify(projectData)}`));
 
     const types = projectData.issueTypes || [];
     console.log('[Jira] Available issue types:', types.map(t => t.name));
