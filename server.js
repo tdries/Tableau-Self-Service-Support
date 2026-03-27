@@ -102,28 +102,19 @@ function ssePush(issueNumber, payload) {
   }
 }
 
-// ---- Jira Issues proxy ----
-function createJiraIssue(payload, callback) {
-  const { title, description, category } = payload;
-  const body = JSON.stringify({
-    fields: {
-      project:   { key: JIRA_PROJECT },
-      summary:   title,
-      description: { type: 'doc', version: 1, content: [{ type: 'paragraph', content: [{ type: 'text', text: description }] }] },
-      issuetype: { name: 'Task' },
-      ...(category ? { labels: [category] } : {})
-    }
-  });
+// ---- Jira helpers ----
+function jiraRequest(method, path, body, callback) {
   const auth = Buffer.from(`${JIRA_EMAIL}:${JIRA_TOKEN}`).toString('base64');
+  const bodyStr = body ? JSON.stringify(body) : null;
   const req = https.request({
     hostname: JIRA_HOST,
-    path: '/rest/api/3/issue',
-    method: 'POST',
+    path,
+    method,
     headers: {
-      'Authorization': `Basic ${auth}`,
-      'Content-Type':  'application/json',
-      'Content-Length': Buffer.byteLength(body),
-      'Accept':        'application/json'
+      'Authorization':  `Basic ${auth}`,
+      'Content-Type':   'application/json',
+      'Accept':         'application/json',
+      ...(bodyStr ? { 'Content-Length': Buffer.byteLength(bodyStr) } : {})
     }
   }, (res) => {
     let data = '';
@@ -137,8 +128,37 @@ function createJiraIssue(payload, callback) {
     });
   });
   req.on('error', err => callback(err));
-  req.write(body);
+  if (bodyStr) req.write(bodyStr);
   req.end();
+}
+
+// ---- Jira Issues proxy ----
+function createJiraIssue(payload, callback) {
+  const { title, description } = payload;
+
+  // Fetch available issue types for the project first
+  jiraRequest('GET', `/rest/api/3/project/${JIRA_PROJECT}`, null, (err, _status, projectData) => {
+    if (err) return callback(err);
+
+    const types = projectData.issueTypes || [];
+    console.log('[Jira] Available issue types:', types.map(t => t.name));
+
+    // Prefer: Service Request > Incident > first non-subtask type
+    const preferred = ['Service Request', 'Incident', 'Bug', 'Task', 'Story'];
+    const picked = preferred.reduce((found, name) => found || types.find(t => t.name === name && !t.subtask), null)
+      || types.find(t => !t.subtask);
+
+    if (!picked) return callback(new Error('No valid issue type found in Jira project'));
+
+    jiraRequest('POST', '/rest/api/3/issue', {
+      fields: {
+        project:     { key: JIRA_PROJECT },
+        summary:     title,
+        description: { type: 'doc', version: 1, content: [{ type: 'paragraph', content: [{ type: 'text', text: description }] }] },
+        issuetype:   { name: picked.name }
+      }
+    }, callback);
+  });
 }
 
 // ---- GitHub Issues proxy ----
