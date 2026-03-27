@@ -132,17 +132,35 @@ function jiraRequest(method, path, body, callback) {
   req.end();
 }
 
-// ---- Jira Issues proxy ----
+// ---- Jira Issues proxy (JSM Service Desk API) ----
 function createJiraIssue(payload, callback) {
   const { title, description } = payload;
-  jiraRequest('POST', '/rest/api/3/issue', {
-    fields: {
-      project:     { key: JIRA_PROJECT },
-      summary:     title,
-      description: { type: 'doc', version: 1, content: [{ type: 'paragraph', content: [{ type: 'text', text: description }] }] },
-      issuetype:   { name: 'Service Request' }
-    }
-  }, callback);
+
+  // Step 1: find the service desk for our project
+  jiraRequest('GET', '/rest/servicedeskapi/servicedesk', null, (err, status, data) => {
+    if (err) return callback(err);
+    if (status >= 400) return callback(new Error(`Jira service desk list failed (${status}): ${JSON.stringify(data)}`));
+
+    const sd = (data.values || []).find(s => s.projectKey === JIRA_PROJECT);
+    if (!sd) return callback(new Error(`No service desk found for project key ${JIRA_PROJECT}`));
+
+    // Step 2: get available request types
+    jiraRequest('GET', `/rest/servicedeskapi/servicedesk/${sd.id}/requesttype`, null, (err, status, rtData) => {
+      if (err) return callback(err);
+      if (status >= 400) return callback(new Error(`Jira request types failed (${status}): ${JSON.stringify(rtData)}`));
+
+      const types = rtData.values || [];
+      console.log('[Jira] Request types:', types.map(t => `${t.id}:${t.name}`));
+      if (!types.length) return callback(new Error('No request types found on service desk'));
+
+      // Step 3: create the request using the first available type
+      jiraRequest('POST', '/rest/servicedeskapi/request', {
+        serviceDeskId:     sd.id,
+        requestTypeId:     types[0].id,
+        requestFieldValues: { summary: title, description }
+      }, callback);
+    });
+  });
 }
 
 // ---- GitHub Issues proxy ----
@@ -284,9 +302,10 @@ const server = http.createServer((req, res) => {
             res.writeHead(status, { 'Content-Type': 'application/json' });
             return res.end(JSON.stringify({ error: msg }));
           }
-          const issueUrl = `https://${JIRA_HOST}/browse/${data.key}`;
+          const issueKey = data.issueKey || data.key;
+          const issueUrl = `https://${JIRA_HOST}/browse/${issueKey}`;
           res.writeHead(201, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ key: data.key, html_url: issueUrl }));
+          res.end(JSON.stringify({ key: issueKey, html_url: issueUrl }));
         });
         return;
       }
