@@ -44,7 +44,7 @@ const anthropic = new Anthropic({ apiKey: ANTHROPIC_KEY });
 const seen    = new Set();
 
 // ---- Anthropic call with retry on 529 overload ----
-async function claudeCreate(params, retries = 4) {
+async function claudeCreate(params, retries = 3) {
   for (let i = 0; i <= retries; i++) {
     try {
       return await anthropic.messages.create(params);
