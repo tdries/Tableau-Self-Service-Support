@@ -43,6 +43,21 @@ if (!TABLEAU_PAT_SECRET) { console.error('[ERROR] Tableau PAT secret missing (se
 const anthropic = new Anthropic({ apiKey: ANTHROPIC_KEY });
 const seen    = new Set();
 
+// ---- Safe JSON parser — handles literal newlines inside string values ----
+function safeParseJson(text) {
+  const match = text.match(/\{[\s\S]*\}/);
+  if (!match) throw new Error('No JSON object found in response');
+  try {
+    return JSON.parse(match[0]);
+  } catch {
+    // Escape unescaped newlines/tabs inside quoted strings
+    const cleaned = match[0].replace(/"((?:[^"\\]|\\.)*)"/gs,
+      (_, inner) => '"' + inner.replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/\t/g, '\\t') + '"'
+    );
+    return JSON.parse(cleaned);
+  }
+}
+
 // ---- Anthropic call with retry on 529 overload ----
 async function claudeCreate(params, retries = 3) {
   for (let i = 0; i <= retries; i++) {
@@ -494,10 +509,7 @@ Omit \`replace\` for delete ops, omit \`insert\` for replace ops. Return empty f
       }]
     });
 
-    const text = msg.content[0].text.trim();
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error('No JSON object found in response');
-    result = JSON.parse(jsonMatch[0]);
+    result = safeParseJson(msg.content[0].text.trim());
   } catch (err) {
     console.log(`  → Biztory AI error: ${err.message}`);
     reportProgress(n, `Error: ${err.message}`, 100, 'error');
@@ -693,10 +705,7 @@ async function analyzeAndFixJira(issueKey) {
         `A user submitted the following Tableau support issue:\n\n**Title:** ${title}\n**Description:**\n${descText.split('---')[0].trim()}\n\nKey XML sections extracted from the workbook:\n\n\`\`\`xml\n${relevantXml}\n\`\`\`\n\nDiagnose the root cause and return the fix. Respond ONLY with a valid JSON object (no markdown outside it):\n{\n  "analysis": "One-sentence root cause",\n  "fixes": [\n    { "op": "replace|insert_after|delete", "find": "verbatim XML to locate", "replace": "...", "insert": "..." }\n  ],\n  "comment": "Human-readable summary of what was changed and what the user should do next"\n}\n\nOmit \`replace\` for delete ops, omit \`insert\` for replace ops. Return empty fixes array if no safe fix is possible.`
       }]
     });
-    const text = msg.content[0].text.trim();
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error('No JSON in response');
-    result = JSON.parse(jsonMatch[0]);
+    result = safeParseJson(msg.content[0].text.trim());
   } catch (err) {
     reportProgress(issueKey, `Error: ${err.message}`, 100, 'error');
     await jiraComment(issueKey, `Agent error during analysis: ${err.message}`);
