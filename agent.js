@@ -112,7 +112,7 @@ function gh(method, endpoint, body) {
       'Authorization': `Bearer ${GITHUB_TOKEN}`,
       'Accept': 'application/vnd.github+json',
       'X-GitHub-Api-Version': '2022-11-28',
-      'User-Agent': 'Biztory-BUDA/1.0',
+      'User-Agent': 'TabServo/1.0',
       ...(data ? { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) } : {})
     }
   }, data);
@@ -193,7 +193,7 @@ async function tableauDownload(token, siteId, workbookId) {
 }
 
 async function tableauPublish(token, siteId, projectId, workbookName, twbxBuffer) {
-  const boundary = `BUDABoundary${Date.now()}`;
+  const boundary = `TabServoBoundary${Date.now()}`;
   const meta = JSON.stringify({ workbook: { name: workbookName, project: { id: projectId } } });
   const NL = '\r\n';
   const body = Buffer.concat([
@@ -278,7 +278,7 @@ function extractRelevantXml(xml) {
   if (filterMatches.length)
     sections.push(`<!-- FILTERS -->\n${cap(filterMatches.slice(0, 20).map(m => m[0].trim()).join('\n'), 2000)}`);
 
-  // Worksheet names — so BUDA knows what sheets already exist
+  // Worksheet names — so TabServo knows what sheets already exist
   const wsNames = [...xml.matchAll(/<worksheet name='([^']+)'/g)].map(m => m[1]);
   if (wsNames.length)
     sections.push(`<!-- EXISTING WORKSHEETS -->\n${wsNames.map(n => `<worksheet name='${n}'/>`).join('\n')}`);
@@ -301,7 +301,7 @@ function hasFixAppliedLabel(issue) {
 }
 
 // ---- Shared BUDA system prompt ----
-const BUDA_SYSTEM = `You are BUDA, an expert Tableau workbook engineer and automated repair agent. You edit TWB/TWBX XML files with surgical precision based on the official Tableau 2026.1 schema.
+const BUDA_SYSTEM = `You are TabServo, an expert Tableau workbook engineer and automated repair agent. You edit TWB/TWBX XML files with surgical precision based on the official Tableau 2026.1 schema.
 
 ## WORKBOOK TOP-LEVEL STRUCTURE
 \`\`\`xml
@@ -473,7 +473,7 @@ async function analyzeAndFix(issue) {
   const relevantXml = extractRelevantXml(wb.twbXml);
 
   // BUDA analysis
-  reportProgress(n, 'The Biztory AI Developer Junio (BUDA) is looking at the issue…', 45);
+  reportProgress(n, 'TabServo is analyzing the issue…', 45);
   console.log('  → Calling Biztory AI...');
   let result;
   try {
@@ -597,7 +597,7 @@ Omit \`replace\` for delete ops, omit \`insert\` for replace ops. Return empty f
   }
 
   await gh('POST', `/repos/${REPO}/issues/${n}/comments`, {
-    body: `✅ **Fix applied automatically by BUDA**\n\n${result.comment}\n\n**Changes (${applied}/${result.fixes.length}):**\n${log.join('\n')}\n\nThe workbook has been republished to Tableau Cloud. Reload your dashboard to see the changes.`
+    body: `✅ **Fix applied automatically by TabServo**\n\n${result.comment}\n\n**Changes (${applied}/${result.fixes.length}):**\n${log.join('\n')}\n\nThe workbook has been republished to Tableau Cloud. Reload your dashboard to see the changes.`
   });
   await gh('POST', `/repos/${REPO}/issues/${n}/labels`, { labels: ['fix-applied'] });
 
@@ -636,7 +636,7 @@ async function analyzeAndFixJira(issueKey) {
       model: 'claude-opus-4-6',
       max_tokens: 300,
       messages: [{ role: 'user', content:
-        `You are BUDA, a Biztory Tableau support AI. A user submitted this issue:\n\nTitle: ${title}\nDescription: ${descText.slice(0, 800)}\n\nWrite a brief, professional comment (2-3 sentences) that: restates how you understand the problem, and confirms you are now starting to work on it.`
+        `You are TabServo, a Tableau support AI. A user submitted this issue:\n\nTitle: ${title}\nDescription: ${descText.slice(0, 800)}\n\nWrite a brief, professional comment (2-3 sentences) that: restates how you understand the problem, and confirms you are now starting to work on it.`
       }]
     });
     interpretation = msg.content[0].text.trim();
@@ -694,7 +694,7 @@ async function analyzeAndFixJira(issueKey) {
   const relevantXml = extractRelevantXml(wb.twbXml);
 
   // BUDA analysis
-  reportProgress(issueKey, 'BUDA is analyzing the workbook…', 45);
+  reportProgress(issueKey, 'TabServo is analyzing the workbook…', 45);
   let result;
   try {
     const msg = await claudeCreate({
@@ -774,7 +774,7 @@ async function analyzeAndFixJira(issueKey) {
     return;
   }
 
-  await jiraComment(issueKey, `Fix applied automatically by BUDA.\n\n${result.comment}\n\nChanges (${applied}/${result.fixes.length}):\n${log.join('\n')}\n\nThe workbook has been republished to Tableau Cloud. Reload your dashboard to see the changes.`);
+  await jiraComment(issueKey, `Fix applied automatically by TabServo.\n\n${result.comment}\n\nChanges (${applied}/${result.fixes.length}):\n${log.join('\n')}\n\nThe workbook has been republished to Tableau Cloud. Reload your dashboard to see the changes.`);
   reportProgress(issueKey, 'Fix published — reload your dashboard', 100, 'ok');
   console.log(`  → Done. ${issueKey} fixed.`);
 }
@@ -845,7 +845,7 @@ setInterval(pollServer, 5000);
 pollServer();
 
 // ---- Start ----
-console.log('\n🤖 BUDA — Biztory AI Developer Junio (Cloud Mode)');
+console.log('\n🤖 TabServo — Tableau AI Support Agent (Cloud Mode)');
 console.log(`   Repo:      ${REPO}`);
 console.log(`   Tableau:   ${TABLEAU_URL} · site: ${TABLEAU_SITE}`);
 console.log(`   PAT:       ${TABLEAU_PAT_NAME}`);

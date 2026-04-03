@@ -177,7 +177,8 @@ const MIME = {
   '.js':   'application/javascript',
   '.css':  'text/css',
   '.png':  'image/png',
-  '.ico':  'image/x-icon'
+  '.ico':  'image/x-icon',
+  '.webp': 'image/webp'
 };
 
 const server = http.createServer((req, res) => {

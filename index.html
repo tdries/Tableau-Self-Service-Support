@@ -222,33 +222,6 @@
       min-height: 14px;
     }
 
-    /* ── GIF display ── */
-    .gif-display {
-      display: none;
-      text-align: center;
-      padding: 14px 12px 10px;
-      background: #FAFBFC;
-      border: 1px solid var(--border);
-      border-top: none;
-    }
-
-    .gif-display.visible { display: block; }
-
-    .gif-display img {
-      width: 100%;
-      max-width: 320px;
-      height: 180px;
-      object-fit: cover;
-      border-radius: 6px;
-      display: block;
-      margin: 0 auto 6px;
-    }
-
-    .gif-caption {
-      font-size: 11px;
-      color: var(--muted);
-      font-style: italic;
-    }
 
     /* ── Activity log ── */
     .activity-section {
@@ -437,16 +410,18 @@
       width: auto;
     }
 
-    .loading-dots::after {
-      content: '';
-      animation: dots 1.5s steps(4, end) infinite;
+    .loading-dots span {
+      animation: dotFade 1.4s infinite;
+      opacity: 0;
     }
 
-    @keyframes dots {
-      0%  { content: ''; }
-      25% { content: '.'; }
-      50% { content: '..'; }
-      75% { content: '...'; }
+    .loading-dots span:nth-child(1) { animation-delay: 0s; }
+    .loading-dots span:nth-child(2) { animation-delay: 0.3s; }
+    .loading-dots span:nth-child(3) { animation-delay: 0.6s; }
+
+    @keyframes dotFade {
+      0%, 20% { opacity: 0; }
+      40%, 100% { opacity: 1; }
     }
 
     /* ── Powered-by footer ── */
@@ -484,7 +459,7 @@
     <label>Log to</label>
     <select id="issueDestination">
       <option value="github">GitHub Issues</option>
-      <option value="jira">Jira Board</option>
+      <option value="jira" selected>Jira Board</option>
     </select>
   </div>
 
@@ -518,7 +493,7 @@
 
   <div id="jiraReady" class="jira-ready">
     <img src="/Jira_Logo.svg.png" alt="Jira" />
-    <span>Jira is ready for you to submit<span class="loading-dots"></span></span>
+    <span>Jira is ready for you to submit<span class="loading-dots"><span>.</span><span>.</span><span>.</span></span></span>
   </div>
 
   <button class="submit-btn" id="submitBtn" onclick="submitIssue()">Submit Issue</button>
@@ -532,10 +507,6 @@
     </div>
     <div class="activity-progress-bar">
       <div id="activityFill" class="activity-progress-fill"></div>
-    </div>
-    <div id="gifDisplay" class="gif-display">
-      <img id="gifImg" src="" alt="Hang tight…" />
-      <div id="gifCaption" class="gif-caption"></div>
     </div>
     <div id="logEntries" class="log-entries"></div>
     <div id="refreshPrompt" class="refresh-prompt">
@@ -553,7 +524,7 @@
 </div>
 
 <div class="powered-by">
-  Powered by <img src="/biztory-logo.png" alt="Biztory" />
+  Powered by <img src="/Biztory%20Logo-2.webp" alt="Biztory" />
 </div>
 
 <script>
@@ -656,18 +627,6 @@
 
     section.classList.add('visible');
 
-    // Fetch a GIF based on the issue title
-    const query = issueTitle || 'fix it';
-    fetch(`/api/gif?q=${encodeURIComponent(query)}`)
-      .then(r => r.json())
-      .then(({ url }) => {
-        if (url) {
-          document.getElementById('gifImg').src = url;
-          document.getElementById('gifCaption').textContent = `BUDA is working on: "${query}"`;
-          document.getElementById('gifDisplay').classList.add('visible');
-        }
-      })
-      .catch(() => {});
 
     function addEntry(step, pct, type) {
       const now  = new Date();
@@ -699,7 +658,6 @@
       addEntry(step, pct, type || 'info');
       if (pct >= 100) {
         es.close();
-        document.getElementById('gifDisplay').classList.remove('visible');
         if (type === 'ok' && hasBackup && issNum) {
           pendingRestoreIssue = issNum;
           localStorage.setItem('pendingRestoreIssue', issNum);
