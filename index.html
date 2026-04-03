@@ -415,6 +415,40 @@
 
     .btn-restore:hover { background: #f9e0d8; }
 
+    /* ── Jira ready indicator ── */
+    .jira-ready {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 10px 14px;
+      margin-bottom: 10px;
+      background: #F0F4FF;
+      border: 1px solid #B3C9FF;
+      border-radius: 6px;
+      font-size: 12px;
+      color: #1A3A6B;
+    }
+
+    .jira-ready.visible { display: flex; }
+
+    .jira-ready img {
+      height: 18px;
+      width: auto;
+    }
+
+    .loading-dots::after {
+      content: '';
+      animation: dots 1.5s steps(4, end) infinite;
+    }
+
+    @keyframes dots {
+      0%  { content: ''; }
+      25% { content: '.'; }
+      50% { content: '..'; }
+      75% { content: '...'; }
+    }
+
     /* ── Powered-by footer ── */
     .powered-by {
       display: flex;
@@ -482,6 +516,11 @@
     <input type="text" id="workbookUrl" placeholder="e.g. Superstore" autocomplete="off" />
   </div>
 
+  <div id="jiraReady" class="jira-ready">
+    <img src="/Jira_Logo.svg.png" alt="Jira" />
+    <span>Jira is ready for you to submit<span class="loading-dots"></span></span>
+  </div>
+
   <button class="submit-btn" id="submitBtn" onclick="submitIssue()">Submit Issue</button>
 
   <div id="status" class="status"></div>
@@ -530,6 +569,22 @@
     document.getElementById('fixActions').classList.add('visible');
           document.getElementById('fixNotice').classList.add('visible');
   }
+
+  // ---- Jira-ready indicator ----
+  function checkJiraReady() {
+    const dest     = document.getElementById('issueDestination').value;
+    const title    = document.getElementById('issueTitle').value.trim();
+    const category = document.getElementById('issueCategory').value;
+    const desc     = document.getElementById('issueBody').value.trim();
+    const wb       = document.getElementById('workbookUrl').value.trim();
+    const ready    = dest === 'jira' && title && category && desc && wb;
+    document.getElementById('jiraReady').classList.toggle('visible', ready);
+  }
+
+  ['issueDestination', 'issueTitle', 'issueCategory', 'issueBody', 'workbookUrl'].forEach(id => {
+    document.getElementById(id).addEventListener('input', checkJiraReady);
+    document.getElementById(id).addEventListener('change', checkJiraReady);
+  });
 
   tableau.extensions.initializeAsync().then(() => {
     const dashboard = tableau.extensions.dashboardContent?.dashboard;
