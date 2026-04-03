@@ -406,18 +406,36 @@
     }
 
     .btn-restore:hover { background: #f9e0d8; }
+
+    /* ── Powered-by footer ── */
+    .powered-by {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 12px 0 20px;
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .powered-by img {
+      height: 16px;
+      width: auto;
+      display: inline-block;
+      vertical-align: middle;
+    }
   </style>
 </head>
 <body>
 
 <div class="header">
-  <span class="header-label">Support</span>
+  <span class="header-label">TabServo</span>
 </div>
 <div class="accent-strip"></div>
 
 <div class="container">
-  <div class="card-title">Biztory 1st level Tableau AI Support</div>
-  <div class="card-subtitle">Submit a request to your preferred issue tracker</div>
+  <div class="card-title">TabServo</div>
+  <div class="card-subtitle">The 1st level Tableau AI Support Solution</div>
   <hr class="divider" />
 
   <div class="field">
@@ -485,6 +503,10 @@
       <button class="btn-restore" onclick="restoreFix()">Restore</button>
     </div>
   </div>
+</div>
+
+<div class="powered-by">
+  Powered by <img src="/biztory-logo.png" alt="Biztory" />
 </div>
 
 <script>
