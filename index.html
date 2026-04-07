@@ -565,6 +565,16 @@
     document.getElementById(id).addEventListener('change', checkJiraReady);
   });
 
+  function onSiteChange() {
+    const wb = document.getElementById('workbookUrl');
+    if (document.getElementById('tableauSite').value === 'timdriesdev') {
+      if (!wb.value.trim()) wb.value = 'Superstore with TabServo';
+    }
+    checkJiraReady();
+  }
+  document.getElementById('tableauSite').addEventListener('change', onSiteChange);
+  onSiteChange();
+
   tableau.extensions.initializeAsync().then(() => {
     const dashboard = tableau.extensions.dashboardContent?.dashboard;
     tableauContext = dashboard ? `Dashboard: ${dashboard.name}` : 'No dashboard context';

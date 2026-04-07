@@ -792,7 +792,7 @@ async function analyzeAndFixJira(issueKey, siteKey) {
   }
 
   await jiraComment(issueKey, `Fix applied automatically by TabServo.\n\n${result.comment}\n\nChanges (${applied}/${result.fixes.length}):\n${log.join('\n')}\n\nThe workbook has been republished to Tableau Cloud. Reload your dashboard to see the changes.`);
-  reportProgress(issueKey, 'Fix published — reload your dashboard', 100, 'ok');
+  reportProgress(issueKey, 'Fix published — reload your dashboard', 100, 'ok', { hasBackup: true, issueNumber: issueKey });
   console.log(`  → Done. ${issueKey} fixed.`);
 }
 
