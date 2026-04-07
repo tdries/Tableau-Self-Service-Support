@@ -349,7 +349,7 @@ function extractRelevantXml(xml) {
   // Full dashboard sections — layout tree needed to add new sheets to dashboards
   const dashMatches = [...xml.matchAll(/<dashboard\b[\s\S]*?<\/dashboard>/g)];
   if (dashMatches.length)
-    sections.push(`<!-- DASHBOARDS (layout) -->\n${cap(dashMatches.map(m => m[0]).join('\n'), 10000)}`);
+    sections.push(`<!-- DASHBOARDS (layout) — use insert_before on a dashboard's <simple-id> to add new zones -->\n${cap(dashMatches.map(m => m[0]).join('\n'), 20000)}`);
 
   return sections.join('\n\n') || '<!-- No key sections extracted -->';
 }
@@ -456,11 +456,11 @@ Use \`insert_after\` with an anchor that EXISTS VERBATIM in the XML.
 - Generate a NEW unique UUID for \`<simple-id>\`
 
 **Step 2 — Add the zone to the dashboard:**
-- Use \`"op": "insert_after"\` with \`"find"\` set to an existing \`</zone>\` closing tag of a SIBLING worksheet zone in the dashboard
-- Use a unique zone \`id\` (scan existing ids, pick the next available)
-- Set appropriate \`x\`, \`y\`, \`w\`, \`h\` values — split the space of a sibling zone
+- Use \`"op": "insert_before"\` with \`"find"\` set to the dashboard's \`<simple-id\` tag (copy it EXACTLY from the dashboard XML including the uuid)
+- The \`"insert"\` is a COMPLETE \`<zone>\` element with unique \`id\`, \`name\` matching the new worksheet name, \`type-v2='worksheet'\`, and \`x\`/\`y\`/\`w\`/\`h\` values
+- Use a unique zone \`id\` (scan ALL existing zone ids in the dashboard, pick the next available number)
 
-**Step 3 — Resize sibling zones** to make room for the new zone
+**Step 3 — Resize an existing sibling zone** to make room for the new zone (use \`replace\` to change its \`h\` or \`w\` value)
 
 CRITICAL: Every \`find\` string must appear VERBATIM in the raw XML. Use the exact XML provided — never fabricate or summarize tags.
 
@@ -490,8 +490,9 @@ CRITICAL: Every \`find\` string must appear VERBATIM in the raw XML. Use the exa
 
 ## FIX OPERATIONS
 1. **replace** — \`{ "op": "replace", "find": "...", "replace": "..." }\`
-2. **insert_after** — \`{ "op": "insert_after", "find": "...", "insert": "..." }\`
-3. **delete** — \`{ "op": "delete", "find": "..." }\`
+2. **insert_after** — \`{ "op": "insert_after", "find": "...", "insert": "..." }\` — inserts AFTER the found string
+3. **insert_before** — \`{ "op": "insert_before", "find": "...", "insert": "..." }\` — inserts BEFORE the found string
+4. **delete** — \`{ "op": "delete", "find": "..." }\`
 
 ## RULES
 - Every \`find\` string MUST appear verbatim in the workbook XML — copy it exactly
@@ -583,12 +584,12 @@ Diagnose the root cause and return the fix. Respond ONLY with a valid JSON objec
 {
   "analysis": "One-sentence root cause",
   "fixes": [
-    { "op": "replace|insert_after|delete", "find": "verbatim XML to locate", "replace": "...", "insert": "..." }
+    { "op": "replace|insert_after|insert_before|delete", "find": "verbatim XML to locate", "replace": "...", "insert": "..." }
   ],
   "comment": "Human-readable summary of what was changed and what the user should do next"
 }
 
-Omit \`replace\` for delete ops, omit \`insert\` for replace ops. Return empty fixes array if no safe fix is possible.`
+Omit \`replace\` for delete ops, omit \`insert\` for replace ops. Use \`insert_before\` when adding zones to dashboards (anchor on the dashboard's \`<simple-id\` tag). When the user asks for a new chart/sheet, you MUST also add it to the relevant dashboard. Return empty fixes array if no safe fix is possible.`
       }]
     });
 
@@ -627,7 +628,8 @@ Omit \`replace\` for delete ops, omit \`insert\` for replace ops. Return empty f
     }
 
     if      (op === 'replace')      xml = xml.split(fix.find).join(fix.replace);
-    else if (op === 'insert_after') xml = xml.split(fix.find).join(fix.find + fix.insert);
+    else if (op === 'insert_after')  xml = xml.split(fix.find).join(fix.find + fix.insert);
+    else if (op === 'insert_before') xml = xml.split(fix.find).join(fix.insert + fix.find);
     else if (op === 'delete')       xml = xml.split(fix.find).join('');
     else { log.push(`⚠️ Unknown op \`${op}\``); continue; }
 
@@ -811,7 +813,7 @@ async function analyzeAndFixJira(issueKey, siteKey) {
       max_tokens: 8096,
       system: BUDA_SYSTEM,
       messages: [{ role: 'user', content:
-        `A user submitted the following Tableau support issue:\n\n**Title:** ${title}\n**Description:**\n${descText.split('---')[0].trim()}\n\nKey XML sections extracted from the workbook:\n\n\`\`\`xml\n${relevantXml}\n\`\`\`\n\nDiagnose the root cause and return the fix. Respond ONLY with a valid JSON object (no markdown outside it):\n{\n  "analysis": "One-sentence root cause",\n  "fixes": [\n    { "op": "replace|insert_after|delete", "find": "verbatim XML to locate", "replace": "...", "insert": "..." }\n  ],\n  "comment": "Human-readable summary of what was changed and what the user should do next"\n}\n\nOmit \`replace\` for delete ops, omit \`insert\` for replace ops. Return empty fixes array if no safe fix is possible.`
+        `A user submitted the following Tableau support issue:\n\n**Title:** ${title}\n**Description:**\n${descText.split('---')[0].trim()}\n\nKey XML sections extracted from the workbook:\n\n\`\`\`xml\n${relevantXml}\n\`\`\`\n\nDiagnose the root cause and return the fix. Respond ONLY with a valid JSON object (no markdown outside it):\n{\n  "analysis": "One-sentence root cause",\n  "fixes": [\n    { "op": "replace|insert_after|insert_before|delete", "find": "verbatim XML to locate", "replace": "...", "insert": "..." }\n  ],\n  "comment": "Human-readable summary of what was changed and what the user should do next"\n}\n\nOmit \`replace\` for delete ops, omit \`insert\` for replace ops. Use \`insert_before\` when adding zones to dashboards (anchor on the dashboard's \`<simple-id\` tag). When the user asks for a new chart/sheet, you MUST also add it to the relevant dashboard. Return empty fixes array if no safe fix is possible.`
       }]
     });
     result = safeParseJson(msg.content[0].text.trim());
@@ -853,7 +855,8 @@ async function analyzeAndFixJira(issueKey, siteKey) {
     const anchor = fix.find ? fix.find.slice(0, 80) + (fix.find.length > 80 ? '…' : '') : '';
     if (!fix.find || !xml.includes(fix.find)) { log.push(`Not found (${op}): ${anchor}`); continue; }
     if      (op === 'replace')      xml = xml.split(fix.find).join(fix.replace);
-    else if (op === 'insert_after') xml = xml.split(fix.find).join(fix.find + fix.insert);
+    else if (op === 'insert_after')  xml = xml.split(fix.find).join(fix.find + fix.insert);
+    else if (op === 'insert_before') xml = xml.split(fix.find).join(fix.insert + fix.find);
     else if (op === 'delete')       xml = xml.split(fix.find).join('');
     else { log.push(`Unknown op: ${op}`); continue; }
     applied++;
