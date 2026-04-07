@@ -456,11 +456,9 @@ Use \`insert_after\` with an anchor that EXISTS VERBATIM in the XML.
 - Generate a NEW unique UUID for \`<simple-id>\`
 
 **Step 2 — Add the zone to the dashboard:**
-- Use \`"op": "insert_before"\` with \`"find"\` set to the dashboard's \`<simple-id\` tag (copy it EXACTLY from the dashboard XML including the uuid)
-- The \`"insert"\` is a COMPLETE \`<zone>\` element with unique \`id\`, \`name\` matching the new worksheet name, \`type-v2='worksheet'\`, and \`x\`/\`y\`/\`w\`/\`h\` values
-- Use a unique zone \`id\` (scan ALL existing zone ids in the dashboard, pick the next available number)
-
-**Step 3 — Resize an existing sibling zone** to make room for the new zone (use \`replace\` to change its \`h\` or \`w\` value)
+- Use \`"op": "add_dashboard_zone"\` with \`"dashboard"\` set to the dashboard name and \`"zone"\` set to the zone XML
+- The zone must have a unique \`id\` (scan ALL existing zone ids, pick the next available), \`name\` matching the new worksheet, \`type-v2='worksheet'\`, and \`x\`/\`y\`/\`w\`/\`h\` values
+- Example: \`{ "op": "add_dashboard_zone", "dashboard": "Overview", "zone": "<zone h='30000' id='99' name='New Sheet' type-v2='worksheet' w='74000' x='25000' y='70000' />" }\`
 
 CRITICAL: Every \`find\` string must appear VERBATIM in the raw XML. Use the exact XML provided — never fabricate or summarize tags.
 
@@ -493,6 +491,7 @@ CRITICAL: Every \`find\` string must appear VERBATIM in the raw XML. Use the exa
 2. **insert_after** — \`{ "op": "insert_after", "find": "...", "insert": "..." }\` — inserts AFTER the found string
 3. **insert_before** — \`{ "op": "insert_before", "find": "...", "insert": "..." }\` — inserts BEFORE the found string
 4. **delete** — \`{ "op": "delete", "find": "..." }\`
+5. **add_dashboard_zone** — \`{ "op": "add_dashboard_zone", "dashboard": "Dashboard Name", "zone": "<zone .../>..." }\` — automatically inserts the zone XML into the named dashboard's \`<zones>\` section. Use this INSTEAD of insert_before/insert_after when adding sheets to dashboards. The zone will be inserted as a child of the outermost layout zone.
 
 ## RULES
 - Every \`find\` string MUST appear verbatim in the workbook XML — copy it exactly
@@ -618,7 +617,24 @@ Omit \`replace\` for delete ops, omit \`insert\` for replace ops. Use \`insert_b
   const log = [];
 
   for (const fix of result.fixes) {
-    const op     = fix.op || 'replace';
+    const op = fix.op || 'replace';
+
+    // Special op: add_dashboard_zone — programmatic zone insertion
+    if (op === 'add_dashboard_zone') {
+      const dashName = fix.dashboard;
+      const zoneXml  = fix.zone;
+      if (!dashName || !zoneXml) { log.push(`⚠️ add_dashboard_zone: missing dashboard or zone`); continue; }
+      // Find the dashboard's <zones> section and insert the new zone before the closing </zones>
+      const dashRegex = new RegExp(`(<dashboard[^>]*name='${dashName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}'[\\s\\S]*?)(</zones>)`);
+      const dashMatch = xml.match(dashRegex);
+      if (!dashMatch) { log.push(`⚠️ Dashboard '${dashName}' not found`); continue; }
+      xml = xml.replace(dashRegex, `$1${zoneXml}\n      $2`);
+      applied++;
+      log.push(`✅ Added zone to dashboard '${dashName}'`);
+      console.log(`  → Added zone to dashboard '${dashName}'`);
+      continue;
+    }
+
     const anchor = fix.find ? fix.find.slice(0, 80) + (fix.find.length > 80 ? '…' : '') : '';
 
     if (!fix.find || !xml.includes(fix.find)) {
@@ -627,10 +643,10 @@ Omit \`replace\` for delete ops, omit \`insert\` for replace ops. Use \`insert_b
       continue;
     }
 
-    if      (op === 'replace')      xml = xml.split(fix.find).join(fix.replace);
+    if      (op === 'replace')       xml = xml.split(fix.find).join(fix.replace);
     else if (op === 'insert_after')  xml = xml.split(fix.find).join(fix.find + fix.insert);
     else if (op === 'insert_before') xml = xml.split(fix.find).join(fix.insert + fix.find);
-    else if (op === 'delete')       xml = xml.split(fix.find).join('');
+    else if (op === 'delete')        xml = xml.split(fix.find).join('');
     else { log.push(`⚠️ Unknown op \`${op}\``); continue; }
 
     applied++;
@@ -851,13 +867,27 @@ async function analyzeAndFixJira(issueKey, siteKey) {
   const log = [];
 
   for (const fix of result.fixes) {
-    const op     = fix.op || 'replace';
+    const op = fix.op || 'replace';
+
+    if (op === 'add_dashboard_zone') {
+      const dashName = fix.dashboard;
+      const zoneXml  = fix.zone;
+      if (!dashName || !zoneXml) { log.push(`add_dashboard_zone: missing dashboard or zone`); continue; }
+      const dashRegex = new RegExp(`(<dashboard[^>]*name='${dashName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}'[\\s\\S]*?)(</zones>)`);
+      const dashMatch = xml.match(dashRegex);
+      if (!dashMatch) { log.push(`Dashboard '${dashName}' not found`); continue; }
+      xml = xml.replace(dashRegex, `$1${zoneXml}\n      $2`);
+      applied++;
+      log.push(`Added zone to dashboard '${dashName}'`);
+      continue;
+    }
+
     const anchor = fix.find ? fix.find.slice(0, 80) + (fix.find.length > 80 ? '…' : '') : '';
     if (!fix.find || !xml.includes(fix.find)) { log.push(`Not found (${op}): ${anchor}`); continue; }
-    if      (op === 'replace')      xml = xml.split(fix.find).join(fix.replace);
+    if      (op === 'replace')       xml = xml.split(fix.find).join(fix.replace);
     else if (op === 'insert_after')  xml = xml.split(fix.find).join(fix.find + fix.insert);
     else if (op === 'insert_before') xml = xml.split(fix.find).join(fix.insert + fix.find);
-    else if (op === 'delete')       xml = xml.split(fix.find).join('');
+    else if (op === 'delete')        xml = xml.split(fix.find).join('');
     else { log.push(`Unknown op: ${op}`); continue; }
     applied++;
     log.push(`Applied ${op}: ${anchor}`);
