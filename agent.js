@@ -248,6 +248,7 @@ function repackWorkbook(xml, zip, twbEntryName) {
 
 // ---- Progress reporting ----
 function reportProgress(issueNumber, step, pct, type = 'info', extra = {}) {
+  if (pct >= 100 && type !== 'ok') logFixResult(String(issueNumber), false);
   const body = JSON.stringify({ step, pct, type, ...extra });
   const parsed = new URL(`/api/progress/${issueNumber}`, SERVER_URL);
   const mod  = parsed.protocol === 'https:' ? https : http;
@@ -262,6 +263,22 @@ function reportProgress(issueNumber, step, pct, type = 'info', extra = {}) {
   r.write(body);
   r.end();
   console.log(`  [${pct}%] ${step}`);
+}
+
+function logFixResult(issueId, succeeded) {
+  const body = JSON.stringify({ fixSucceeded: succeeded });
+  const parsed = new URL(`/api/log/${encodeURIComponent(issueId)}`, SERVER_URL);
+  const mod = parsed.protocol === 'https:' ? https : http;
+  const port = parsed.port ? parseInt(parsed.port) : (parsed.protocol === 'https:' ? 443 : 80);
+  const r = mod.request({
+    hostname: parsed.hostname, port,
+    path: parsed.pathname,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }
+  }, res => res.resume());
+  r.on('error', () => {});
+  r.write(body);
+  r.end();
 }
 
 // ---- XML helpers ----
@@ -621,6 +638,7 @@ Omit \`replace\` for delete ops, omit \`insert\` for replace ops. Return empty f
   await gh('POST', `/repos/${REPO}/issues/${n}/labels`, { labels: ['fix-applied'] });
 
   reportProgress(n, 'Fix published — reload your dashboard', 100, 'ok', { hasBackup: true, issueNumber: n });
+  logFixResult(String(n), true);
   console.log(`  → Done. Issue #${n} marked fix-applied.`);
 }
 
@@ -795,6 +813,7 @@ async function analyzeAndFixJira(issueKey, siteKey) {
 
   await jiraComment(issueKey, `Fix applied automatically by TabServo.\n\n${result.comment}\n\nChanges (${applied}/${result.fixes.length}):\n${log.join('\n')}\n\nThe workbook has been republished to Tableau Cloud. Reload your dashboard to see the changes.`);
   reportProgress(issueKey, 'Fix published — reload your dashboard', 100, 'ok', { hasBackup: true, issueNumber: issueKey });
+  logFixResult(issueKey, true);
   console.log(`  → Done. ${issueKey} fixed.`);
 }
 

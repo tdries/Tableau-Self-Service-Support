@@ -28,6 +28,35 @@ const JIRA_EMAIL   = e('JIRA_EMAIL');
 const JIRA_HOST    = 'biztory.atlassian.net';
 const JIRA_PROJECT = 'BTSA'; // locked — issues may only ever be created on this board
 
+// ---- Request log (persistent JSON file) ----
+const LOG_FILE = path.join(__dirname, 'request-log.json');
+
+function readLog() {
+  try { return JSON.parse(fs.readFileSync(LOG_FILE, 'utf8')); }
+  catch { return []; }
+}
+
+function writeLog(entries) {
+  fs.writeFileSync(LOG_FILE, JSON.stringify(entries, null, 2));
+}
+
+function logRequest(entry) {
+  const entries = readLog();
+  entries.push(entry);
+  writeLog(entries);
+  return entry;
+}
+
+function updateLog(issueId, updates) {
+  const entries = readLog();
+  const entry = entries.find(e => e.issueId === issueId);
+  if (entry) {
+    Object.assign(entry, updates);
+    writeLog(entries);
+  }
+  return entry;
+}
+
 // ---- smee.io webhook tunnel (forwards GitHub webhooks to localhost) ----
 if (SMEE_URL) {
   const SmeeClient = require('smee-client');
@@ -293,6 +322,7 @@ const server = http.createServer((req, res) => {
 
           ssePush(issueKey, { step: `Issue ${issueKey} logged in Jira`, pct: 5, type: 'ok' });
           pendingJiraTriggers.push({ issueKey, tableauSite: tableauSite || 'biztorypulse' });
+          logRequest({ issueId: issueKey, summary: title, category: category || '', destination: 'jira', tableauSite: tableauSite || 'biztorypulse', workbook: workbookName || '', timestamp: new Date().toISOString(), fixSucceeded: null, accepted: null });
         });
         return;
       }
@@ -305,6 +335,7 @@ const server = http.createServer((req, res) => {
         if (data.number) {
           ssePush(data.number, { step: `Issue #${data.number} logged in GitHub`, pct: 5, type: 'ok' });
           pendingTriggers.push({ issueNumber: data.number, tableauSite: tableauSite || 'biztorypulse' });
+          logRequest({ issueId: String(data.number), summary: title, category: category || '', destination: 'github', tableauSite: tableauSite || 'biztorypulse', workbook: workbookName || '', timestamp: new Date().toISOString(), fixSucceeded: null, accepted: null });
         }
       });
     });
@@ -385,6 +416,30 @@ const server = http.createServer((req, res) => {
       }
     });
     return;
+  }
+
+  // --- PATCH /api/log/:issueId  (update fix/acceptance status) ---
+  if (req.method === 'PATCH' && url.pathname.startsWith('/api/log/')) {
+    const issueId = decodeURIComponent(url.pathname.split('/').pop());
+    let body = '';
+    req.on('data', c => body += c);
+    req.on('end', () => {
+      try {
+        const updates = JSON.parse(body);
+        const entry = updateLog(issueId, updates);
+        res.writeHead(entry ? 200 : 404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(entry || { error: 'not found' }));
+      } catch {
+        res.writeHead(400); res.end();
+      }
+    });
+    return;
+  }
+
+  // --- GET /api/log  (retrieve full log for reporting) ---
+  if (req.method === 'GET' && url.pathname === '/api/log') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify(readLog()));
   }
 
   // --- Static files ---
