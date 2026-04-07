@@ -348,8 +348,13 @@ function extractRelevantXml(xml) {
 }
 
 function extractWorkbookName(issueBody) {
-  const match = issueBody.match(/\*\*Workbook:\*\*\s*(.+?)(?:\n|$)/);
-  return match ? match[1].trim() : null;
+  // Markdown format: **Workbook:** name
+  const md = issueBody.match(/\*\*Workbook:\*\*\s*(.+?)(?:\n|$)/);
+  if (md) return md[1].trim();
+  // ADF table text: "Workbook\nname" (from adfToText)
+  const adf = issueBody.match(/Workbook\n(.+?)(?:\n|$)/);
+  if (adf) return adf[1].trim();
+  return null;
 }
 
 function hasFixAppliedLabel(issue) {
