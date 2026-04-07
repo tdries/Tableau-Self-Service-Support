@@ -577,7 +577,8 @@ CRITICAL: Every \`find\` string must appear VERBATIM in the raw XML. Use the exa
 5. **add_dashboard_zone** — \`{ "op": "add_dashboard_zone", "dashboard": "Dashboard Name", "zone": "<zone .../>..." }\` — automatically inserts the zone XML into the named dashboard's \`<zones>\` section. Use this INSTEAD of insert_before/insert_after when adding sheets to dashboards. The zone will be inserted as a child of the outermost layout zone.
 
 ## RULES
-- Every \`find\` string MUST appear verbatim in the workbook XML — copy it exactly
+- Keep \`find\` strings as SHORT as possible — match the minimum unique fragment needed. For attribute changes (e.g. mark class, formula), just match the single element tag, not surrounding context
+- If the same tag appears in multiple worksheets and you need to target one, include the parent \`<worksheet name='...'>\` opening tag as a separate replace to narrow scope — or accept that the change applies to all matching elements
 - Make the smallest possible change; never restructure elements unnecessarily
 - NEVER modify \`<connection>\` attributes
 - NEVER rename sheet/tab names (\`name\` attribute on \`<worksheet>\` or \`<dashboard>\` elements) — renaming breaks Tableau Cloud refresh and downstream references
