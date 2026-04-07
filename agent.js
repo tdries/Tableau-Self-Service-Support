@@ -392,46 +392,161 @@ function validateXml(xml) {
   return { valid: true };
 }
 
+// ---- XSD-based validation for generated XML ----
+const XSD_RULES = {
+  zone: {
+    required: ['x', 'y', 'w', 'h', 'id'],
+    validAttrs: { 'type-v2': ['layout-basic', 'layout-flow', 'worksheet', 'title', 'text', 'empty', 'filter', 'paramctrl', 'color', 'shape', 'size', 'map', 'highlighter', 'bitmap', 'web', 'add-in', 'dashboard-object', 'flipboard', 'flipboard-nav', 'currpage'] },
+    attrTypes: { x: 'int', y: 'int', w: 'int', h: 'int', id: 'uint' }
+  },
+  mark: {
+    validAttrs: { 'class': ['Automatic', 'Text', 'Icon', 'Shape', 'Rectangle', 'Bar', 'GanttBar', 'Square', 'Circle', 'Heatmap', 'PolyLine', 'Line', 'Polygon', 'Area', 'Pie', 'Multipolygon', 'VizExtension'] }
+  },
+  column: {
+    validAttrs: { datatype: ['unknown', 'integer', 'real', 'string', 'datetime', 'date', 'boolean', 'tuple', 'spatial', 'table'], role: ['dimension', 'measure'], type: ['nominal', 'ordinal', 'quantitative', 'unknown'] }
+  },
+  'column-instance': {
+    required: ['name', 'column', 'type', 'pivot', 'derivation'],
+    validAttrs: { type: ['nominal', 'ordinal', 'quantitative', 'unknown'], pivot: ['key', 'alias'] }
+  },
+  'simple-id': {
+    required: ['uuid']
+  }
+};
+
+function validateGeneratedXml(fixXml) {
+  const errors = [];
+  // Validate each element in the generated XML against XSD rules
+  const elements = [...fixXml.matchAll(/<(\w[\w-]*)\b([^>]*)(?:\/>|>)/g)];
+  for (const [full, tag, attrStr] of elements) {
+    const rules = XSD_RULES[tag];
+    if (!rules) continue;
+
+    // Check required attributes
+    if (rules.required) {
+      for (const req of rules.required) {
+        if (!attrStr.includes(`${req}=`)) {
+          errors.push(`<${tag}>: missing required attribute '${req}'`);
+        }
+      }
+    }
+
+    // Check enum values
+    if (rules.validAttrs) {
+      for (const [attr, validValues] of Object.entries(rules.validAttrs)) {
+        const valMatch = attrStr.match(new RegExp(`${attr}='([^']*)'`));
+        if (valMatch && !validValues.includes(valMatch[1])) {
+          errors.push(`<${tag} ${attr}='${valMatch[1]}'>: invalid value. Valid: ${validValues.join(', ')}`);
+        }
+      }
+    }
+
+    // Check integer types
+    if (rules.attrTypes) {
+      for (const [attr, type] of Object.entries(rules.attrTypes)) {
+        const valMatch = attrStr.match(new RegExp(`${attr}='([^']*)'`));
+        if (valMatch) {
+          const num = Number(valMatch[1]);
+          if (isNaN(num) || !Number.isInteger(num)) errors.push(`<${tag} ${attr}='${valMatch[1]}'>: must be integer`);
+          if (type === 'uint' && num < 0) errors.push(`<${tag} ${attr}='${valMatch[1]}'>: must be non-negative`);
+        }
+      }
+    }
+  }
+
+  // Check for duplicate zone ids
+  const zoneIds = [...fixXml.matchAll(/<zone\b[^>]*id='(\d+)'/g)].map(m => m[1]);
+  const dupes = zoneIds.filter((id, i) => zoneIds.indexOf(id) !== i);
+  if (dupes.length) errors.push(`Duplicate zone ids: ${[...new Set(dupes)].join(', ')}`);
+
+  return errors;
+}
+
+// ---- Smart context loading ----
+// Pass 1: Build a workbook overview for the AI to identify what it needs
+function buildWorkbookOverview(xml) {
+  const sections = [];
+
+  // Datasource names (always needed for reference)
+  const dsMatches = [...xml.matchAll(/<datasource\b[^>]*caption='([^']*)'[^>]*name='([^']*)'/g)];
+  if (dsMatches.length)
+    sections.push(`<!-- DATASOURCES -->\n${dsMatches.map(m => `<datasource caption='${m[1]}' name='${m[2]}' />`).join('\n')}`);
+
+  // Worksheet names
+  const wsNames = [...xml.matchAll(/<worksheet name='([^']+)'/g)].map(m => m[1]);
+  if (wsNames.length)
+    sections.push(`<!-- WORKSHEETS (${wsNames.length}) -->\n${wsNames.map(n => `- ${n}`).join('\n')}`);
+
+  // Dashboard names
+  const dashNames = [...xml.matchAll(/<dashboard\b[^>]*name='([^']+)'/g)].map(m => m[1]);
+  if (dashNames.length)
+    sections.push(`<!-- DASHBOARDS (${dashNames.length}) -->\n${dashNames.map(n => `- ${n}`).join('\n')}`);
+
+  // Calculated fields (names + formulas only)
+  const calcMatches = [...xml.matchAll(/<column([^>]*)>[\s\S]*?<calculation[^>]*formula='([^']*)'[\s\S]*?<\/column>/g)];
+  if (calcMatches.length) {
+    const calcs = calcMatches.map(m => {
+      const nameMatch = m[1].match(/name='([^']+)'/);
+      return nameMatch ? `${nameMatch[1]}: ${m[2]}` : null;
+    }).filter(Boolean);
+    sections.push(`<!-- CALCULATED FIELDS -->\n${calcs.join('\n')}`);
+  }
+
+  return sections.join('\n\n');
+}
+
+// Pass 2: Extract full XML for specific sections the AI requests
+function extractTargetedXml(xml, targets) {
+  const sections = [];
+
+  for (const target of targets) {
+    if (target.type === 'worksheet') {
+      const re = new RegExp(`<worksheet name='${target.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}'>[\\s\\S]*?</worksheet>`);
+      const match = xml.match(re);
+      if (match) sections.push(`<!-- WORKSHEET: ${target.name} (FULL) -->\n${match[0]}`);
+    } else if (target.type === 'dashboard') {
+      const re = new RegExp(`<dashboard\\b[^>]*name='${target.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}'[\\s\\S]*?</dashboard>`);
+      const match = xml.match(re);
+      if (match) sections.push(`<!-- DASHBOARD: ${target.name} (FULL) -->\n${match[0]}`);
+    } else if (target.type === 'datasource') {
+      // Extract column definitions from datasource
+      const dsRe = new RegExp(`<datasource[^>]*name='${target.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}'[\\s\\S]*?</datasource>`);
+      const dsMatch = xml.match(dsRe);
+      if (dsMatch) {
+        // Extract just columns (not the full connection)
+        const columns = [...dsMatch[0].matchAll(/<column\b[^>]*>[\s\S]*?<\/column>|<column\b[^/]*\/>/g)];
+        if (columns.length) sections.push(`<!-- DATASOURCE COLUMNS: ${target.name} -->\n${columns.map(m => m[0]).join('\n')}`);
+      }
+    }
+  }
+
+  // Always include one full worksheet as a template for creating new ones
+  if (!targets.some(t => t.type === 'worksheet')) {
+    const firstWs = xml.match(/<worksheet name='[^']*'>[\s\S]*?<\/worksheet>/);
+    if (firstWs) sections.push(`<!-- TEMPLATE WORKSHEET (for reference) -->\n${firstWs[0]}`);
+  }
+
+  return sections.join('\n\n') || '<!-- No matching sections found -->';
+}
+
+// Legacy fallback — used when pass 1 fails
 function extractRelevantXml(xml) {
   const cap = (str, max) => str.length > max ? str.slice(0, max) + '\n<!-- ...truncated -->' : str;
   const sections = [];
-
-  const runMatches = [...xml.matchAll(/<run[^>]*>[^<\n]+<\/run>/g)];
-  if (runMatches.length)
-    sections.push(`<!-- TEXT ELEMENTS -->\n${cap([...new Set(runMatches.map(m => m[0].trim()))].join('\n'), 6000)}`);
 
   const calcMatches = [...xml.matchAll(/<column([^>]*)>[\s\S]*?<calculation([^>]*)\/?>[\s\S]*?<\/column>/g)];
   if (calcMatches.length)
     sections.push(`<!-- CALCULATED FIELDS -->\n${cap(calcMatches.map(m => m[0].trim()).join('\n'), 8000)}`);
 
-  const paramMatches = [...xml.matchAll(/<column[^>]*param-domain-type='[^']*'[^>]*>[\s\S]*?<\/column>/g)];
-  if (paramMatches.length)
-    sections.push(`<!-- PARAMETERS -->\n${cap(paramMatches.map(m => m[0].trim()).join('\n'), 2000)}`);
-
-  const connMatches = [...xml.matchAll(/<connection\b[^>]*>/g)];
-  if (connMatches.length)
-    sections.push(`<!-- CONNECTIONS -->\n${[...new Set(connMatches.map(m => m[0]))].join('\n').slice(0, 1000)}`);
-
-  const filterMatches = [...xml.matchAll(/<filter[^>]*>[\s\S]*?<\/filter>/g)];
-  if (filterMatches.length)
-    sections.push(`<!-- FILTERS -->\n${cap(filterMatches.slice(0, 20).map(m => m[0].trim()).join('\n'), 2000)}`);
-
-  // Full worksheet blocks — agent needs complete examples as templates for creating new sheets
   const wsMatches = [...xml.matchAll(/<worksheet name='[^']*'>[\s\S]*?<\/worksheet>/g)];
   if (wsMatches.length) {
-    // Include up to 2 full worksheets as templates + list remaining names
     const fullSheets = wsMatches.slice(0, 2).map(m => m[0]);
-    const remainingNames = wsMatches.slice(2).map(m => m[0].match(/<worksheet name='([^']+)'/)?.[1]).filter(Boolean);
-    let wsSection = `<!-- WORKSHEETS (${wsMatches.length} total) -->\n${cap(fullSheets.join('\n'), 12000)}`;
-    if (remainingNames.length) wsSection += `\n<!-- Additional worksheets: ${remainingNames.join(', ')} -->`;
-    wsSection += `\n<!-- INSERT NEW WORKSHEETS BEFORE: </worksheets> -->`;
-    sections.push(wsSection);
+    sections.push(`<!-- WORKSHEETS (${wsMatches.length} total) -->\n${cap(fullSheets.join('\n'), 12000)}`);
   }
 
-  // Full dashboard sections — layout tree needed to add new sheets to dashboards
   const dashMatches = [...xml.matchAll(/<dashboard\b[\s\S]*?<\/dashboard>/g)];
   if (dashMatches.length)
-    sections.push(`<!-- DASHBOARDS (layout) — use insert_before on a dashboard's <simple-id> to add new zones -->\n${cap(dashMatches.map(m => m[0]).join('\n'), 20000)}`);
+    sections.push(`<!-- DASHBOARDS -->\n${cap(dashMatches.map(m => m[0]).join('\n'), 30000)}`);
 
   return sections.join('\n\n') || '<!-- No key sections extracted -->';
 }
@@ -666,11 +781,32 @@ async function analyzeAndFix(issue, siteKey) {
     return;
   }
 
-  const relevantXml = extractRelevantXml(wb.twbXml);
+  const issueText = issue.body.split('---')[0].trim();
 
-  // BUDA analysis
+  // ---- PASS 1: Identify what sections the AI needs ----
+  reportProgress(n, 'Analyzing workbook structure…', 35);
+  const overview = buildWorkbookOverview(wb.twbXml);
+  let targets;
+  try {
+    const pass1 = await claudeCreate({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 500,
+      messages: [{ role: 'user', content:
+        `Given this Tableau workbook overview:\n\n${overview}\n\nAnd this user request:\nTitle: ${issue.title}\nDescription: ${issueText}\n\nWhich specific worksheets, dashboards, and datasources do you need to see the FULL XML for to fix this? Respond ONLY with JSON:\n{ "targets": [{ "type": "worksheet|dashboard|datasource", "name": "exact name" }] }\n\nInclude ALL relevant sections. If unsure, include more rather than less.`
+      }]
+    });
+    targets = safeParseJson(pass1.content[0].text.trim()).targets || [];
+    console.log(`  → Pass 1: need ${targets.map(t => `${t.type}:${t.name}`).join(', ')}`);
+  } catch {
+    targets = [];
+    console.log('  → Pass 1 failed, using legacy extraction');
+  }
+
+  // ---- PASS 2: Extract targeted full XML ----
   reportProgress(n, 'TabServo is analyzing the issue…', 45);
   console.log('  → Calling Biztory AI...');
+  const targetedXml = targets.length ? extractTargetedXml(wb.twbXml, targets) : extractRelevantXml(wb.twbXml);
+
   let result;
   try {
     const msg = await claudeCreate({
@@ -678,30 +814,8 @@ async function analyzeAndFix(issue, siteKey) {
       max_tokens: 8096,
       system: BUDA_SYSTEM,
 
-      messages: [{
-        role: 'user',
-        content: `A user submitted the following Tableau support issue:
-
-**Title:** ${issue.title}
-**Description:**
-${issue.body.split('---')[0].trim()}
-
-Key XML sections extracted from the workbook:
-
-\`\`\`xml
-${relevantXml}
-\`\`\`
-
-Diagnose the root cause and return the fix. Respond ONLY with a valid JSON object (no markdown outside it):
-{
-  "analysis": "One-sentence root cause",
-  "fixes": [
-    { "op": "replace|insert_after|insert_before|delete", "find": "verbatim XML to locate", "replace": "...", "insert": "..." }
-  ],
-  "comment": "Human-readable summary of what was changed and what the user should do next"
-}
-
-Omit \`replace\` for delete ops, omit \`insert\` for replace ops. Use \`insert_before\` when adding zones to dashboards (anchor on the dashboard's \`<simple-id\` tag). When the user asks for a new chart/sheet, you MUST also add it to the relevant dashboard. Return empty fixes array if no safe fix is possible.`
+      messages: [{ role: 'user', content:
+        `A user submitted the following Tableau support issue:\n\n**Title:** ${issue.title}\n**Description:**\n${issueText}\n\nFull XML of the relevant sections from the workbook:\n\n\`\`\`xml\n${targetedXml}\n\`\`\`\n\nDiagnose the root cause and return the fix. Respond ONLY with a valid JSON object (no markdown outside it):\n{\n  "analysis": "One-sentence root cause",\n  "fixes": [\n    { "op": "replace|insert_after|insert_before|delete", "find": "verbatim XML to locate", "replace": "...", "insert": "..." }\n  ],\n  "comment": "Human-readable summary of what was changed and what the user should do next"\n}\n\nOmit \`replace\` for delete ops, omit \`insert\` for replace ops. When the user asks for a new chart/sheet, you MUST also add it to the relevant dashboard using add_dashboard_zone. Return empty fixes array if no safe fix is possible.`
       }]
     });
 
@@ -711,6 +825,19 @@ Omit \`replace\` for delete ops, omit \`insert\` for replace ops. Use \`insert_b
     reportProgress(n, `Error: ${err.message}`, 100, 'error');
     await gh('POST', `/repos/${REPO}/issues/${n}/comments`, { body: `⚠️ **Agent error during analysis:** ${err.message}` });
     return;
+  }
+
+  // ---- XSD validation of generated fixes ----
+  for (const fix of (result.fixes || [])) {
+    const xmlToValidate = fix.replace || fix.insert || fix.zone || '';
+    if (xmlToValidate) {
+      const xsdErrors = validateGeneratedXml(xmlToValidate);
+      if (xsdErrors.length) {
+        console.log(`  → XSD validation warnings: ${xsdErrors.join('; ')}`);
+        // Don't block — log the warnings but let the fix attempt proceed
+        // The publish step will catch truly invalid XML
+      }
+    }
   }
 
   console.log(`  → Analysis: ${result.analysis}`);
@@ -957,10 +1084,31 @@ async function analyzeAndFixJira(issueKey, siteKey) {
     return;
   }
 
-  const relevantXml = extractRelevantXml(wb.twbXml);
+  const issueText = descText.split('---')[0].trim();
 
-  // BUDA analysis
+  // ---- PASS 1: Identify what sections the AI needs ----
+  reportProgress(issueKey, 'Analyzing workbook structure…', 35);
+  const overview = buildWorkbookOverview(wb.twbXml);
+  let targets;
+  try {
+    const pass1 = await claudeCreate({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 500,
+      messages: [{ role: 'user', content:
+        `Given this Tableau workbook overview:\n\n${overview}\n\nAnd this user request:\nTitle: ${title}\nDescription: ${issueText}\n\nWhich specific worksheets, dashboards, and datasources do you need to see the FULL XML for to fix this? Respond ONLY with JSON:\n{ "targets": [{ "type": "worksheet|dashboard|datasource", "name": "exact name" }] }\n\nInclude ALL relevant sections. If unsure, include more rather than less.`
+      }]
+    });
+    targets = safeParseJson(pass1.content[0].text.trim()).targets || [];
+    console.log(`  → Pass 1: need ${targets.map(t => `${t.type}:${t.name}`).join(', ')}`);
+  } catch {
+    targets = [];
+    console.log('  → Pass 1 failed, using legacy extraction');
+  }
+
+  // ---- PASS 2: Extract targeted full XML and analyze ----
   reportProgress(issueKey, 'TabServo is analyzing the workbook…', 45);
+  const targetedXml = targets.length ? extractTargetedXml(wb.twbXml, targets) : extractRelevantXml(wb.twbXml);
+
   let result;
   try {
     const msg = await claudeCreate({
@@ -968,7 +1116,7 @@ async function analyzeAndFixJira(issueKey, siteKey) {
       max_tokens: 8096,
       system: BUDA_SYSTEM,
       messages: [{ role: 'user', content:
-        `A user submitted the following Tableau support issue:\n\n**Title:** ${title}\n**Description:**\n${descText.split('---')[0].trim()}\n\nKey XML sections extracted from the workbook:\n\n\`\`\`xml\n${relevantXml}\n\`\`\`\n\nDiagnose the root cause and return the fix. Respond ONLY with a valid JSON object (no markdown outside it):\n{\n  "analysis": "One-sentence root cause",\n  "fixes": [\n    { "op": "replace|insert_after|insert_before|delete", "find": "verbatim XML to locate", "replace": "...", "insert": "..." }\n  ],\n  "comment": "Human-readable summary of what was changed and what the user should do next"\n}\n\nOmit \`replace\` for delete ops, omit \`insert\` for replace ops. Use \`insert_before\` when adding zones to dashboards (anchor on the dashboard's \`<simple-id\` tag). When the user asks for a new chart/sheet, you MUST also add it to the relevant dashboard. Return empty fixes array if no safe fix is possible.`
+        `A user submitted the following Tableau support issue:\n\n**Title:** ${title}\n**Description:**\n${issueText}\n\nFull XML of the relevant sections from the workbook:\n\n\`\`\`xml\n${targetedXml}\n\`\`\`\n\nDiagnose the root cause and return the fix. Respond ONLY with a valid JSON object (no markdown outside it):\n{\n  "analysis": "One-sentence root cause",\n  "fixes": [\n    { "op": "replace|insert_after|insert_before|delete", "find": "verbatim XML to locate", "replace": "...", "insert": "..." }\n  ],\n  "comment": "Human-readable summary of what was changed and what the user should do next"\n}\n\nOmit \`replace\` for delete ops, omit \`insert\` for replace ops. When the user asks for a new chart/sheet, you MUST also add it to the relevant dashboard using add_dashboard_zone. Return empty fixes array if no safe fix is possible.`
       }]
     });
     result = safeParseJson(msg.content[0].text.trim());
@@ -982,6 +1130,15 @@ async function analyzeAndFixJira(issueKey, siteKey) {
       adfParagraph(adfText('TabServo — Biztory Tableau AI Support', true))
     ]);
     return;
+  }
+
+  // XSD validation of generated fixes
+  for (const fix of (result.fixes || [])) {
+    const xmlToValidate = fix.replace || fix.insert || fix.zone || '';
+    if (xmlToValidate) {
+      const xsdErrors = validateGeneratedXml(xmlToValidate);
+      if (xsdErrors.length) console.log(`  → XSD validation warnings: ${xsdErrors.join('; ')}`);
+    }
   }
 
   console.log(`  → Analysis: ${result.analysis}`);
