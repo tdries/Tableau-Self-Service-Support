@@ -592,6 +592,22 @@ const server = http.createServer((req, res) => {
     return res.end(JSON.stringify(readLog()));
   }
 
+  // --- GET /api/log.xlsx  (download XLS) ---
+  if (req.method === 'GET' && url.pathname === '/api/log.xlsx') {
+    syncXls(readLog());
+    try {
+      const xlsData = fs.readFileSync(XLS_FILE);
+      res.writeHead(200, {
+        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'Content-Disposition': 'attachment; filename="tabservo-request-log.xlsx"',
+        'Content-Length': xlsData.length
+      });
+      return res.end(xlsData);
+    } catch {
+      res.writeHead(404); return res.end('No log data yet');
+    }
+  }
+
   // --- Static files ---
   const filePath = path.join(__dirname, url.pathname === '/' ? 'index.html' : url.pathname);
   fs.readFile(filePath, (err, data) => {
