@@ -456,6 +456,14 @@
   <hr class="divider" />
 
   <div class="field">
+    <label>Tableau Site</label>
+    <select id="tableauSite">
+      <option value="timdriesdev" selected>timdriesdev</option>
+      <option value="biztorypulse">biztorypulse</option>
+    </select>
+  </div>
+
+  <div class="field">
     <label>Log to</label>
     <select id="issueDestination">
       <option value="github">GitHub Issues</option>
@@ -571,6 +579,7 @@
     const description = document.getElementById('issueBody').value.trim();
     const workbookName = document.getElementById('workbookUrl').value.trim();
     const destination = document.getElementById('issueDestination').value;
+    const tableauSite = document.getElementById('tableauSite').value;
 
     if (!title)        return showStatus('Please enter a title.', 'error');
     if (!category)     return showStatus('Please select a category.', 'error');
@@ -586,7 +595,7 @@
       const res = await fetch('/api/submit-issue', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, category, description, context: tableauContext, workbookName, destination })
+        body: JSON.stringify({ title, category, description, context: tableauContext, workbookName, destination, tableauSite })
       });
 
       const data = await res.json();

@@ -203,7 +203,7 @@ const server = http.createServer((req, res) => {
           const issueNumber = payload.issue.number;
           console.log(`[Webhook] Issue #${issueNumber} opened — queuing for agent`);
           ssePush(issueNumber, { step: 'GitHub webhook received', pct: 8, type: 'info' });
-          pendingTriggers.push(issueNumber);
+          pendingTriggers.push({ issueNumber });
           ssePush(issueNumber, { step: 'Agent triggered', pct: 10, type: 'info' });
         }
       } catch {}
@@ -269,7 +269,7 @@ const server = http.createServer((req, res) => {
         return res.end(JSON.stringify({ error: 'Invalid JSON' }));
       }
 
-      const { title, category, description, context, workbookName, destination } = parsed;
+      const { title, category, description, context, workbookName, destination, tableauSite } = parsed;
       if (!title || !description) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         return res.end(JSON.stringify({ error: 'title and description are required' }));
@@ -292,7 +292,7 @@ const server = http.createServer((req, res) => {
           res.end(JSON.stringify({ key: issueKey, html_url: issueUrl }));
 
           ssePush(issueKey, { step: `Issue ${issueKey} logged in Jira`, pct: 5, type: 'ok' });
-          pendingJiraTriggers.push(issueKey);
+          pendingJiraTriggers.push({ issueKey, tableauSite: tableauSite || 'biztorypulse' });
         });
         return;
       }
@@ -304,7 +304,7 @@ const server = http.createServer((req, res) => {
 
         if (data.number) {
           ssePush(data.number, { step: `Issue #${data.number} logged in GitHub`, pct: 5, type: 'ok' });
-          pendingTriggers.push(data.number);
+          pendingTriggers.push({ issueNumber: data.number, tableauSite: tableauSite || 'biztorypulse' });
         }
       });
     });
@@ -313,20 +313,20 @@ const server = http.createServer((req, res) => {
 
   // --- GET /api/next-trigger  (agent polls this) ---
   if (req.method === 'GET' && url.pathname === '/api/next-trigger') {
-    const issueNumber = pendingTriggers.shift();
-    if (issueNumber) {
+    const trigger = pendingTriggers.shift();
+    if (trigger) {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      return res.end(JSON.stringify({ issueNumber }));
+      return res.end(JSON.stringify(trigger));
     }
     res.writeHead(204); return res.end();
   }
 
   // --- GET /api/next-jira-trigger  (agent polls this) ---
   if (req.method === 'GET' && url.pathname === '/api/next-jira-trigger') {
-    const issueKey = pendingJiraTriggers.shift();
-    if (issueKey) {
+    const trigger = pendingJiraTriggers.shift();
+    if (trigger) {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      return res.end(JSON.stringify({ issueKey }));
+      return res.end(JSON.stringify(trigger));
     }
     res.writeHead(204); return res.end();
   }

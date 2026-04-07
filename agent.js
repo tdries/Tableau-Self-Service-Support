@@ -30,15 +30,31 @@ const JIRA_TOKEN         = (e('TAB_SUPPORT_AI_FULL') || e('TAB_SUPPORT_AI')).rep
 const JIRA_EMAIL         = e('JIRA_EMAIL');
 const JIRA_HOST          = 'biztory.atlassian.net';
 const TABLEAU_URL        = (e('Tableau_URL') || 'https://10ax.online.tableau.com').replace(/\/$/, '');
-const TABLEAU_SITE       = e('Site') || '';
-const TABLEAU_PAT_NAME   = e('TABLEAU_PAT_NAME') || 'test2';
-const TABLEAU_PAT_SECRET = e('TABLEAU_PAT_SECRET') || e('test2') || '';
 const SERVER_URL         = e('RAILWAY_URL') || 'http://localhost:8766';
 const REPO               = 'tdries/Tableau-Self-Service-Support';
 
-if (!GITHUB_TOKEN)       { console.error('[ERROR] GitHub token missing'); process.exit(1); }
-if (!ANTHROPIC_KEY)      { console.error('[ERROR] ANTHROPIC_API_KEY missing'); process.exit(1); }
-if (!TABLEAU_PAT_SECRET) { console.error('[ERROR] Tableau PAT secret missing (set TABLEAU_PAT_SECRET or test2 in .env)'); process.exit(1); }
+// Site-specific Tableau credentials
+const TABLEAU_SITES = {
+  biztorypulse: {
+    site:      e('Site') || 'biztorypulse',
+    patName:   e('TABLEAU_PAT_NAME') || 'test2',
+    patSecret: e('TABLEAU_PAT_SECRET') || ''
+  },
+  timdriesdev: {
+    site:      'timdriesdev',
+    patName:   e('TABLEAU_PAT_NAME_TIMDRIESDEV') || '',
+    patSecret: e('TABLEAU_PAT_SECRET_TIMDRIESDEV') || ''
+  }
+};
+
+const DEFAULT_SITE = 'timdriesdev';
+
+function getTableauCreds(siteKey) {
+  return TABLEAU_SITES[siteKey] || TABLEAU_SITES[DEFAULT_SITE];
+}
+
+if (!GITHUB_TOKEN)  { console.error('[ERROR] GitHub token missing'); process.exit(1); }
+if (!ANTHROPIC_KEY) { console.error('[ERROR] ANTHROPIC_API_KEY missing'); process.exit(1); }
 
 const anthropic = new Anthropic({ apiKey: ANTHROPIC_KEY });
 const seen    = new Set();
@@ -150,12 +166,13 @@ function adfToText(node) {
 // ---- Tableau REST API ----
 const TABLEAU_API = `${TABLEAU_URL}/api/3.22`;
 
-async function tableauAuth() {
+async function tableauAuth(siteKey) {
+  const creds = getTableauCreds(siteKey);
   const body = JSON.stringify({
     credentials: {
-      personalAccessTokenName:   TABLEAU_PAT_NAME,
-      personalAccessTokenSecret: TABLEAU_PAT_SECRET,
-      site: { contentUrl: TABLEAU_SITE }
+      personalAccessTokenName:   creds.patName,
+      personalAccessTokenSecret: creds.patSecret,
+      site: { contentUrl: creds.site }
     }
   });
   const { body: resp, status } = await httpReq({
@@ -421,7 +438,7 @@ Zone rules — violating these causes HTTP 400 on publish:
 - New dashboard zones MUST have unique \`id\` values — scan existing ids first`;
 
 // ---- Core: analyze + fix ----
-async function analyzeAndFix(issue) {
+async function analyzeAndFix(issue, siteKey) {
   console.log(`\n[Agent] Issue #${issue.number}: ${issue.title}`);
   const n = issue.number;
 
@@ -436,7 +453,7 @@ async function analyzeAndFix(issue) {
   // Auth + find workbook
   let token, siteId, workbook;
   try {
-    ({ token, siteId } = await tableauAuth());
+    ({ token, siteId } = await tableauAuth(siteKey));
     console.log('  → Authenticated with Tableau Cloud');
     workbook = await tableauFindWorkbook(token, siteId, workbookName);
     console.log(`  → Found: ${workbook.name} (${workbook.id})`);
@@ -608,7 +625,7 @@ Omit \`replace\` for delete ops, omit \`insert\` for replace ops. Return empty f
 // ---- Jira: analyze + fix ----
 const seenJira = new Set();
 
-async function analyzeAndFixJira(issueKey) {
+async function analyzeAndFixJira(issueKey, siteKey) {
   if (seenJira.has(issueKey)) return;
   seenJira.add(issueKey);
   console.log(`\n[Agent] Jira ${issueKey}`);
@@ -658,7 +675,7 @@ async function analyzeAndFixJira(issueKey) {
   // Auth + find workbook
   let token, siteId, workbook;
   try {
-    ({ token, siteId } = await tableauAuth());
+    ({ token, siteId } = await tableauAuth(siteKey));
     workbook = await tableauFindWorkbook(token, siteId, workbookName);
     console.log(`  → Found: ${workbook.name} (${workbook.id})`);
   } catch (err) {
@@ -780,12 +797,12 @@ async function analyzeAndFixJira(issueKey) {
 }
 
 // ---- Restore handler ----
-async function handleRestore(issueNumber) {
+async function handleRestore(issueNumber, siteKey) {
   const backup = backups.get(issueNumber);
   if (!backup) { console.log(`[Agent] No in-memory backup for issue #${issueNumber}`); return; }
   console.log(`[Agent] Restoring issue #${issueNumber}...`);
   try {
-    const { token, siteId } = await tableauAuth();
+    const { token, siteId } = await tableauAuth(siteKey);
     await tableauPublish(token, siteId, backup.projectId, backup.name, backup.originalBuffer);
     backups.delete(issueNumber);
     console.log(`  → Restored ${backup.name}`);
@@ -820,23 +837,24 @@ async function pollServer() {
   try {
     const trigger = await poll('/api/next-trigger');
     if (trigger.status === 200 && trigger.body?.issueNumber) {
-      const num = trigger.body.issueNumber;
+      const { issueNumber: num, tableauSite } = trigger.body;
       gh('GET', `/repos/${REPO}/issues/${num}`).then(({ body: issue }) => {
         if (issue.number && !hasFixAppliedLabel(issue) && !seen.has(issue.id)) {
           seen.add(issue.id);
-          analyzeAndFix(issue);
+          analyzeAndFix(issue, tableauSite);
         }
       }).catch(err => console.error(`[Agent] trigger error: ${err.message}`));
     }
 
     const jiraTrigger = await poll('/api/next-jira-trigger');
     if (jiraTrigger.status === 200 && jiraTrigger.body?.issueKey) {
-      analyzeAndFixJira(jiraTrigger.body.issueKey).catch(err => console.error(`[Agent] Jira error: ${err.message}`));
+      const { issueKey, tableauSite } = jiraTrigger.body;
+      analyzeAndFixJira(issueKey, tableauSite).catch(err => console.error(`[Agent] Jira error: ${err.message}`));
     }
 
     const restore = await poll('/api/next-restore');
     if (restore.status === 200 && restore.body?.issueNumber) {
-      handleRestore(restore.body.issueNumber);
+      handleRestore(restore.body.issueNumber, restore.body.tableauSite);
     }
   } catch {} // server not ready yet
 }
@@ -847,7 +865,6 @@ pollServer();
 // ---- Start ----
 console.log('\n🤖 TabServo — Tableau AI Support Agent (Cloud Mode)');
 console.log(`   Repo:      ${REPO}`);
-console.log(`   Tableau:   ${TABLEAU_URL} · site: ${TABLEAU_SITE}`);
-console.log(`   PAT:       ${TABLEAU_PAT_NAME}`);
+console.log(`   Tableau:   ${TABLEAU_URL} · sites: ${Object.keys(TABLEAU_SITES).join(', ')} (default: ${DEFAULT_SITE})`);
 console.log(`   Server:    ${SERVER_URL}`);
 console.log(`   AI:        ${ANTHROPIC_KEY.slice(0, 10)}…\n`);
