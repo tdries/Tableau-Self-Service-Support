@@ -358,18 +358,27 @@ function smartFind(xml, findStr) {
   const startIdx = xml.indexOf(openMatch[0]);
   let depth = 1;
   let pos = startIdx + openMatch[0].length;
-  const openTag = `<${tag}`;
-  const closeTag = `</${tag}>`;
+  // Use regex to find only exact tag matches (not <zone-style when looking for <zone>)
+  const openRe  = new RegExp(`<${tag}\\b`, 'g');
+  const closeRe = new RegExp(`</${tag}>`, 'g');
   while (depth > 0 && pos < xml.length) {
-    const nextOpen  = xml.indexOf(openTag, pos);
-    const nextClose = xml.indexOf(closeTag, pos);
-    if (nextClose === -1) break;
-    if (nextOpen !== -1 && nextOpen < nextClose) {
-      depth++;
-      pos = nextOpen + openTag.length;
+    openRe.lastIndex = pos;
+    closeRe.lastIndex = pos;
+    const nextOpen  = openRe.exec(xml);
+    const nextClose = closeRe.exec(xml);
+    if (!nextClose) break;
+    if (nextOpen && nextOpen.index < nextClose.index) {
+      // Check if this is a self-closing tag (e.g. <zone ... />) — don't increment depth
+      const tagEnd = xml.indexOf('>', nextOpen.index);
+      if (tagEnd !== -1 && xml[tagEnd - 1] === '/') {
+        pos = tagEnd + 1; // Skip self-closing tag, depth unchanged
+      } else {
+        depth++;
+        pos = tagEnd + 1;
+      }
     } else {
       depth--;
-      pos = nextClose + closeTag.length;
+      pos = nextClose.index + nextClose[0].length;
     }
   }
   if (depth === 0) return xml.slice(startIdx, pos);
