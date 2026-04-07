@@ -358,8 +358,8 @@ function smartFind(xml, findStr) {
   const startIdx = xml.indexOf(openMatch[0]);
   let depth = 1;
   let pos = startIdx + openMatch[0].length;
-  // Use regex to find only exact tag matches (not <zone-style when looking for <zone>)
-  const openRe  = new RegExp(`<${tag}\\b`, 'g');
+  // Match exact tag (not <zone-style when looking for <zone>). \b fails because - is a boundary.
+  const openRe  = new RegExp(`<${tag}[\\s>]`, 'g');
   const closeRe = new RegExp(`</${tag}>`, 'g');
   while (depth > 0 && pos < xml.length) {
     openRe.lastIndex = pos;
