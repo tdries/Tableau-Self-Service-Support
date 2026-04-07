@@ -74,16 +74,18 @@ function safeParseJson(text) {
   }
 }
 
-// ---- Anthropic call with retry on 529 overload ----
-async function claudeCreate(params, retries = 3) {
+// ---- Anthropic call with retry on 529 overload + 429 rate limit ----
+async function claudeCreate(params, retries = 5) {
   for (let i = 0; i <= retries; i++) {
     try {
       return await anthropic.messages.create(params);
     } catch (err) {
-      const is529 = err?.status === 529 || String(err?.message).includes('overloaded');
-      if (is529 && i < retries) {
-        const wait = 15000 * (i + 1); // 15s, 30s, 45s, 60s
-        console.log(`  [Claude] 529 overloaded — retrying in ${wait / 1000}s (attempt ${i + 1}/${retries})`);
+      const status = err?.status || err?.error?.status;
+      const is529 = status === 529 || String(err?.message).includes('overloaded');
+      const is429 = status === 429 || String(err?.message).includes('rate_limit');
+      if ((is529 || is429) && i < retries) {
+        const wait = is429 ? 60000 * (i + 1) : 15000 * (i + 1); // 429: 60s, 120s, ... | 529: 15s, 30s, ...
+        console.log(`  [Claude] ${is429 ? '429 rate limit' : '529 overloaded'} — retrying in ${wait / 1000}s (attempt ${i + 1}/${retries})`);
         await new Promise(r => setTimeout(r, wait));
       } else {
         throw err;
