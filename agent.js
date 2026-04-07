@@ -624,11 +624,31 @@ Omit \`replace\` for delete ops, omit \`insert\` for replace ops. Use \`insert_b
       const dashName = fix.dashboard;
       const zoneXml  = fix.zone;
       if (!dashName || !zoneXml) { log.push(`⚠️ add_dashboard_zone: missing dashboard or zone`); continue; }
-      // Find the dashboard's <zones> section and insert the new zone before the closing </zones>
-      const dashRegex = new RegExp(`(<dashboard[^>]*name='${dashName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}'[\\s\\S]*?)(</zones>)`);
+      // Extract the dashboard section
+      const dashRegex = new RegExp(`<dashboard[^>]*name='${dashName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}'[\\s\\S]*?</dashboard>`);
       const dashMatch = xml.match(dashRegex);
       if (!dashMatch) { log.push(`⚠️ Dashboard '${dashName}' not found`); continue; }
-      xml = xml.replace(dashRegex, `$1${zoneXml}\n      $2`);
+      const dashXml = dashMatch[0];
+      // Find the last worksheet zone's closing </zone> inside the dashboard
+      // Worksheet zones have a name= attribute and no type-v2= (or type-v2='worksheet')
+      const wsZoneCloses = [...dashXml.matchAll(/<zone[^>]+name='[^']+(?:(?!type-v2)|[^>]*type-v2='worksheet')[^>]*>[\s\S]*?<\/zone>/g)];
+      let updatedDash;
+      if (wsZoneCloses.length) {
+        // Insert after the last worksheet zone
+        const lastWsZone = wsZoneCloses[wsZoneCloses.length - 1][0];
+        updatedDash = dashXml.replace(lastWsZone, lastWsZone + '\n              ' + zoneXml);
+      } else {
+        // Fallback: insert before the first </zone> closing inside <zones>
+        const zonesMatch = dashXml.match(/<zones>[\s\S]*?<\/zones>/);
+        if (!zonesMatch) { log.push(`⚠️ No <zones> found in dashboard '${dashName}'`); continue; }
+        const zonesXml = zonesMatch[0];
+        // Find the last </zone> before </zones>
+        const lastCloseIdx = zonesXml.lastIndexOf('</zone>', zonesXml.lastIndexOf('</zones>'));
+        if (lastCloseIdx === -1) { log.push(`⚠️ No zones to anchor in dashboard '${dashName}'`); continue; }
+        const updatedZones = zonesXml.slice(0, lastCloseIdx) + zoneXml + '\n            ' + zonesXml.slice(lastCloseIdx);
+        updatedDash = dashXml.replace(zonesXml, updatedZones);
+      }
+      xml = xml.replace(dashXml, updatedDash);
       applied++;
       log.push(`✅ Added zone to dashboard '${dashName}'`);
       console.log(`  → Added zone to dashboard '${dashName}'`);
@@ -875,10 +895,25 @@ async function analyzeAndFixJira(issueKey, siteKey) {
       const dashName = fix.dashboard;
       const zoneXml  = fix.zone;
       if (!dashName || !zoneXml) { log.push(`add_dashboard_zone: missing dashboard or zone`); continue; }
-      const dashRegex = new RegExp(`(<dashboard[^>]*name='${dashName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}'[\\s\\S]*?)(</zones>)`);
+      const dashRegex = new RegExp(`<dashboard[^>]*name='${dashName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}'[\\s\\S]*?</dashboard>`);
       const dashMatch = xml.match(dashRegex);
       if (!dashMatch) { log.push(`Dashboard '${dashName}' not found`); continue; }
-      xml = xml.replace(dashRegex, `$1${zoneXml}\n      $2`);
+      const dashXml = dashMatch[0];
+      const wsZoneCloses = [...dashXml.matchAll(/<zone[^>]+name='[^']+(?:(?!type-v2)|[^>]*type-v2='worksheet')[^>]*>[\s\S]*?<\/zone>/g)];
+      let updatedDash;
+      if (wsZoneCloses.length) {
+        const lastWsZone = wsZoneCloses[wsZoneCloses.length - 1][0];
+        updatedDash = dashXml.replace(lastWsZone, lastWsZone + '\n              ' + zoneXml);
+      } else {
+        const zonesMatch = dashXml.match(/<zones>[\s\S]*?<\/zones>/);
+        if (!zonesMatch) { log.push(`No <zones> found in dashboard '${dashName}'`); continue; }
+        const zonesXml = zonesMatch[0];
+        const lastCloseIdx = zonesXml.lastIndexOf('</zone>', zonesXml.lastIndexOf('</zones>'));
+        if (lastCloseIdx === -1) { log.push(`No zones to anchor in dashboard '${dashName}'`); continue; }
+        const updatedZones = zonesXml.slice(0, lastCloseIdx) + zoneXml + '\n            ' + zonesXml.slice(lastCloseIdx);
+        updatedDash = dashXml.replace(zonesXml, updatedZones);
+      }
+      xml = xml.replace(dashXml, updatedDash);
       applied++;
       log.push(`Added zone to dashboard '${dashName}'`);
       continue;
