@@ -207,13 +207,57 @@ function jiraTransition(issueKey, transitionName, callback) {
 
 // ---- Jira Issues proxy ----
 function createJiraIssue(payload, callback) {
-  const { title, description } = payload;
+  const { title, description, category, workbookName } = payload;
   if (JIRA_PROJECT !== 'BTSA') return callback(new Error('Jira writes are locked to project BTSA only'));
+
+  const adfContent = [
+    { type: 'paragraph', content: [
+      { type: 'text', text: 'Dear support team,' }
+    ]},
+    { type: 'paragraph', content: [
+      { type: 'text', text: 'A new support request has been submitted via the TabServo Tableau extension.' }
+    ]},
+    { type: 'heading', attrs: { level: 3 }, content: [
+      { type: 'text', text: 'Issue Description' }
+    ]},
+    { type: 'paragraph', content: [
+      { type: 'text', text: description }
+    ]},
+    ...(workbookName || category ? [{
+      type: 'heading', attrs: { level: 3 }, content: [
+        { type: 'text', text: 'Details' }
+      ]
+    }] : []),
+    ...(workbookName || category ? [{
+      type: 'table', attrs: { layout: 'default' }, content: [
+        ...(workbookName ? [{
+          type: 'tableRow', content: [
+            { type: 'tableHeader', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Workbook' }] }] },
+            { type: 'tableCell', content: [{ type: 'paragraph', content: [{ type: 'text', text: workbookName }] }] }
+          ]
+        }] : []),
+        ...(category ? [{
+          type: 'tableRow', content: [
+            { type: 'tableHeader', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Category' }] }] },
+            { type: 'tableCell', content: [{ type: 'paragraph', content: [{ type: 'text', text: category }] }] }
+          ]
+        }] : [])
+      ]
+    }] : []),
+    { type: 'rule' },
+    { type: 'paragraph', content: [
+      { type: 'text', text: 'TabServo will now analyze the workbook and attempt an automatic fix. Updates will follow on this ticket.', marks: [{ type: 'em' }] }
+    ]},
+    { type: 'paragraph', content: [
+      { type: 'text', text: 'TabServo — Biztory Tableau AI Support', marks: [{ type: 'strong' }] }
+    ]}
+  ];
+
   jiraRequest('POST', '/rest/api/3/issue', {
     fields: {
       project:     { key: 'BTSA' },
       summary:     title,
-      description: { type: 'doc', version: 1, content: [{ type: 'paragraph', content: [{ type: 'text', text: description }] }] },
+      description: { type: 'doc', version: 1, content: adfContent },
       issuetype:   { name: 'Submit a request or incident' }
     }
   }, callback);
@@ -352,7 +396,7 @@ const server = http.createServer((req, res) => {
       const fullDescription = `${description}${workbookLine}\n\n---\n_Submitted via Tableau Self-Service Support extension_\n_${context || 'No Tableau context'}_`;
 
       if (destination === 'jira') {
-        createJiraIssue({ title, description: fullDescription, category }, (err, status, data) => {
+        createJiraIssue({ title, description, category, workbookName }, (err, status, data) => {
           if (err) { res.writeHead(500); return res.end(JSON.stringify({ error: err.message })); }
           if (status >= 400) {
             const msg = (data.errorMessages && data.errorMessages[0]) || JSON.stringify(data.errors || data);
@@ -474,35 +518,39 @@ const server = http.createServer((req, res) => {
         // Update local log
         updateLog(issueId, { accepted });
 
-        // If it's a Jira issue (keys like BTSA-24), comment + transition
+        // If it's a Jira issue (keys like BTSA-24), fetch reporter, comment + transition
         if (/^[A-Z]+-\d+$/.test(issueId)) {
-          const adf = accepted ? [
-            { type: 'paragraph', content: [{ type: 'text', text: `Dear user,` }] },
-            { type: 'paragraph', content: [{ type: 'text', text: 'We are happy to inform you that the proposed change has been accepted. The fix is now live on your Tableau dashboard.' }] },
-            { type: 'paragraph', content: [{ type: 'text', text: 'We will proceed to close this ticket. Should you need further assistance, please do not hesitate to open a new request.' }] },
-            { type: 'rule' },
-            { type: 'paragraph', content: [{ type: 'text', text: 'TabServo — Biztory Tableau AI Support', marks: [{ type: 'strong' }] }] }
-          ] : [
-            { type: 'paragraph', content: [{ type: 'text', text: `Dear user,` }] },
-            { type: 'paragraph', content: [{ type: 'text', text: 'We have been informed that the proposed change was declined. Your workbook has been restored to its previous state.' }] },
-            { type: 'paragraph', content: [{ type: 'text', text: 'This ticket will be moved to our backlog and a human support agent will follow up with you shortly.' }] },
-            { type: 'rule' },
-            { type: 'paragraph', content: [{ type: 'text', text: 'TabServo — Biztory Tableau AI Support', marks: [{ type: 'strong' }] }] }
-          ];
+          jiraRequest('GET', `/rest/api/3/issue/${issueId}?fields=reporter`, null, (err, _s, issueData) => {
+            const reporter = issueData?.fields?.reporter?.displayName?.split(' ')[0] || 'there';
 
-          jiraCommentAdf(issueId, adf, (err) => {
-            if (err) console.error(`[Jira] Comment error: ${err.message}`);
-          });
+            const adf = accepted ? [
+              { type: 'paragraph', content: [{ type: 'text', text: `Dear ${reporter},` }] },
+              { type: 'paragraph', content: [{ type: 'text', text: 'We are happy to inform you that the proposed change has been accepted. The fix is now live on your Tableau dashboard.' }] },
+              { type: 'paragraph', content: [{ type: 'text', text: 'We will proceed to close this ticket. Should you need further assistance, please do not hesitate to open a new request.' }] },
+              { type: 'paragraph', content: [{ type: 'text', text: 'Thank you for using TabServo.' }] },
+              { type: 'rule' },
+              { type: 'paragraph', content: [{ type: 'text', text: 'TabServo — Biztory Tableau AI Support', marks: [{ type: 'strong' }] }] }
+            ] : [
+              { type: 'paragraph', content: [{ type: 'text', text: `Dear ${reporter},` }] },
+              { type: 'paragraph', content: [{ type: 'text', text: 'We have been informed that the proposed change was declined. Your workbook has been restored to its previous state.' }] },
+              { type: 'paragraph', content: [{ type: 'text', text: 'This ticket will be moved to our backlog and a human support agent will follow up with you shortly. We apologize for the inconvenience.' }] },
+              { type: 'rule' },
+              { type: 'paragraph', content: [{ type: 'text', text: 'TabServo — Biztory Tableau AI Support', marks: [{ type: 'strong' }] }] }
+            ];
 
-          const targetStatus = accepted ? 'Done' : 'Declined';
-          jiraTransition(issueId, targetStatus, (err) => {
-            if (err) console.log(`[Jira] Transition to "${targetStatus}" failed: ${err.message} — will try common alternatives`);
-            // If exact name didn't match, try common alternatives
-            if (err && accepted) {
-              jiraTransition(issueId, 'Resolve', (e2) => {
-                if (e2) jiraTransition(issueId, 'Close', () => {});
-              });
-            }
+            jiraCommentAdf(issueId, adf, (cErr) => {
+              if (cErr) console.error(`[Jira] Comment error: ${cErr.message}`);
+            });
+
+            const targetStatus = accepted ? 'Done' : 'Declined';
+            jiraTransition(issueId, targetStatus, (tErr) => {
+              if (tErr) console.log(`[Jira] Transition to "${targetStatus}" failed: ${tErr.message} — will try common alternatives`);
+              if (tErr && accepted) {
+                jiraTransition(issueId, 'Resolve', (e2) => {
+                  if (e2) jiraTransition(issueId, 'Close', () => {});
+                });
+              }
+            });
           });
         }
 
