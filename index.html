@@ -539,8 +539,7 @@
 
   let tableauContext = '';
   let detectedWorkbookName = '';
-  let pendingRestoreIssue = localStorage.getItem('pendingRestoreIssue')
-    ? parseInt(localStorage.getItem('pendingRestoreIssue')) : null;
+  let pendingRestoreIssue = localStorage.getItem('pendingRestoreIssue') || null;
 
   // Restore buttons if a fix was pending before a reload
   if (pendingRestoreIssue) {

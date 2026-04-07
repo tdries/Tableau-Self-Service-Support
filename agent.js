@@ -344,6 +344,7 @@ const BUDA_SYSTEM = `You are TabServo, an expert Tableau workbook engineer and a
 - \`calculation class\` valid values: \`tableau\` | \`passthrough\` | \`bin\` | \`categorical-bin\`
 - Field names in formulas and on shelves ALWAYS use [Square Brackets]
 - NEVER touch \`<connection>\` elements — vendor-specific, altering them breaks the datasource
+- NEVER rename sheet/tab names — the \`name\` attribute on \`<worksheet>\` and \`<dashboard>\` elements must stay unchanged, renaming breaks Tableau Cloud refresh
 
 ## WORKSHEET STRUCTURE (inline format used in .twb files)
 \`\`\`xml
@@ -432,6 +433,7 @@ Zone rules — violating these causes HTTP 400 on publish:
 - Every \`find\` string MUST appear verbatim in the workbook XML — copy it exactly
 - Make the smallest possible change; never restructure elements unnecessarily
 - NEVER modify \`<connection>\` attributes
+- NEVER rename sheet/tab names (\`name\` attribute on \`<worksheet>\` or \`<dashboard>\` elements) — renaming breaks Tableau Cloud refresh and downstream references
 - Preserve the exact quoting style (' vs ") of surrounding XML
 - When fixing a calculated field, only change the \`formula='...'\` attribute value
 - New worksheets MUST have a unique \`<simple-id uuid='...'>\` — generate a valid UUID
