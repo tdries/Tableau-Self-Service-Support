@@ -689,6 +689,8 @@ Omit \`replace\` for delete ops, omit \`insert\` for replace ops. Use \`insert_b
   // Publish to Tableau Cloud
   reportProgress(n, 'Publishing fixed workbook to Tableau Cloud…', 90);
   try {
+    // Re-authenticate to get a fresh token — the original may have gone stale during analysis
+    ({ token, siteId } = await tableauAuth(siteKey));
     await tableauPublish(token, siteId, workbook.project.id, workbook.name, fixedBuffer);
     console.log('  → Published to Tableau Cloud');
   } catch (err) {
@@ -934,6 +936,8 @@ async function analyzeAndFixJira(issueKey, siteKey) {
   // Publish
   reportProgress(issueKey, 'Publishing fixed workbook to Tableau Cloud…', 90);
   try {
+    // Re-authenticate to get a fresh token — the original may have gone stale during analysis
+    ({ token, siteId } = await tableauAuth(siteKey));
     await tableauPublish(token, siteId, workbook.project.id, workbook.name, fixedBuffer);
     console.log('  → Published to Tableau Cloud');
   } catch (err) {
