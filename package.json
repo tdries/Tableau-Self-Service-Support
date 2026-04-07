@@ -10,6 +10,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
     "adm-zip": "^0.5.16",
-    "smee-client": "^5.0.0"
+    "smee-client": "^5.0.0",
+    "xlsx": "^0.18.5"
   }
 }

@@ -28,8 +28,10 @@ const JIRA_EMAIL   = e('JIRA_EMAIL');
 const JIRA_HOST    = 'biztory.atlassian.net';
 const JIRA_PROJECT = 'BTSA'; // locked — issues may only ever be created on this board
 
-// ---- Request log (persistent JSON file) ----
+// ---- Request log (persistent JSON + XLS) ----
+const XLSX     = require('xlsx');
 const LOG_FILE = path.join(__dirname, 'request-log.json');
+const XLS_FILE = path.join(__dirname, 'request-log.xlsx');
 
 function readLog() {
   try { return JSON.parse(fs.readFileSync(LOG_FILE, 'utf8')); }
@@ -38,6 +40,25 @@ function readLog() {
 
 function writeLog(entries) {
   fs.writeFileSync(LOG_FILE, JSON.stringify(entries, null, 2));
+  syncXls(entries);
+}
+
+function syncXls(entries) {
+  const rows = entries.map(e => ({
+    'Issue ID':       e.issueId,
+    'Summary':        e.summary,
+    'Category':       e.category,
+    'Destination':    e.destination,
+    'Tableau Site':   e.tableauSite,
+    'Workbook':       e.workbook,
+    'Timestamp':      e.timestamp,
+    'Fix Succeeded':  e.fixSucceeded === null ? '' : e.fixSucceeded ? 'Yes' : 'No',
+    'Accepted':       e.accepted === null ? '' : e.accepted ? 'Accepted' : 'Restored'
+  }));
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Request Log');
+  XLSX.writeFile(wb, XLS_FILE);
 }
 
 function logRequest(entry) {
