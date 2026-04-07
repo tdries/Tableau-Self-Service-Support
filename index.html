@@ -691,9 +691,24 @@
       if (pct >= 100) fill.classList.add('done');
     }
 
+    const ticketLink = pendingIssueUrl
+      ? `<a href="${pendingIssueUrl}" target="_blank">${issueNumber}</a>`
+      : issueNumber;
+
     const es = new EventSource(`/api/progress/${issueNumber}`);
     es.onmessage = (e) => {
       const { step, pct, type, hasBackup, issueNumber: issNum } = JSON.parse(e.data);
+
+      if (pct >= 100 && type !== 'ok') {
+        // Friendly message for end users — hide technical errors
+        console.warn(`[TabServo debug] ${step}`);
+        addEntry('Forwarded to a human agent for closer investigation', pct, 'info');
+        es.close();
+        showStatus(`TabServo has analyzed your issue and has decided to forward it to a human support agent for closer investigation. Thank you for logging this ticket. ${ticketLink}`, 'success');
+        document.getElementById('formFields').classList.remove('collapsed');
+        return;
+      }
+
       addEntry(step, pct, type || 'info');
       if (pct >= 100) {
         es.close();
