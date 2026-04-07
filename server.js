@@ -53,7 +53,8 @@ function syncXls(entries) {
     'Workbook':       e.workbook,
     'Timestamp':      e.timestamp,
     'Fix Succeeded':  e.fixSucceeded === null ? '' : e.fixSucceeded ? 'Yes' : 'No',
-    'Accepted':       e.accepted === null ? '' : e.accepted ? 'Accepted' : 'Restored'
+    'Accepted':       e.accepted === null ? '' : e.accepted ? 'Accepted' : 'Declined',
+    'Decline Reason': e.declineReason || ''
   }));
   const ws = XLSX.utils.json_to_sheet(rows);
   const wb = XLSX.utils.book_new();
@@ -512,11 +513,11 @@ const server = http.createServer((req, res) => {
     req.on('data', c => body += c);
     req.on('end', () => {
       try {
-        const { issueId, accepted } = JSON.parse(body);
+        const { issueId, accepted, declineReason } = JSON.parse(body);
         if (!issueId) throw new Error('Missing issueId');
 
         // Update local log
-        updateLog(issueId, { accepted });
+        updateLog(issueId, { accepted, ...(declineReason ? { declineReason } : {}) });
 
         // If it's a Jira issue (keys like BTSA-24), fetch reporter, comment + transition
         if (/^[A-Z]+-\d+$/.test(issueId)) {
@@ -533,6 +534,9 @@ const server = http.createServer((req, res) => {
             ] : [
               { type: 'paragraph', content: [{ type: 'text', text: `Dear ${reporter},` }] },
               { type: 'paragraph', content: [{ type: 'text', text: 'We have been informed that the proposed change was declined. Your workbook has been restored to its previous state.' }] },
+              ...(declineReason ? [
+                { type: 'paragraph', content: [{ type: 'text', text: 'Reason for declining: ', marks: [{ type: 'strong' }] }, { type: 'text', text: declineReason }] }
+              ] : []),
               { type: 'paragraph', content: [{ type: 'text', text: 'This ticket will be moved to our backlog and a human support agent will follow up with you shortly. We apologize for the inconvenience.' }] },
               { type: 'rule' },
               { type: 'paragraph', content: [{ type: 'text', text: 'TabServo — Biztory Tableau AI Support', marks: [{ type: 'strong' }] }] }

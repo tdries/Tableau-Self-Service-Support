@@ -443,6 +443,50 @@
     }
 
     /* ── Form collapse after submit ── */
+    /* ── Decline reason section ── */
+    .decline-section {
+      display: none;
+      margin-top: 10px;
+      padding: 12px 14px;
+      background: var(--orange-light);
+      border: 1.5px solid var(--orange);
+      border-radius: 6px;
+    }
+
+    .decline-section.visible { display: block; }
+
+    .decline-section label {
+      margin-bottom: 6px;
+    }
+
+    .decline-section select {
+      margin-bottom: 10px;
+    }
+
+    .decline-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .decline-actions button {
+      flex: 1;
+      padding: 9px;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+    }
+
+    .btn-cancel-decline {
+      background: var(--surface);
+      color: var(--text);
+      border: 1.5px solid var(--border) !important;
+    }
+
+    .btn-cancel-decline:hover { background: var(--border); }
+
     #formFields {
       overflow: hidden;
       max-height: 2000px;
@@ -541,7 +585,21 @@
     </div>
     <div id="fixActions" class="fix-actions">
       <button class="btn-accept" onclick="acceptFix()">Accept</button>
-      <button class="btn-restore" onclick="restoreFix()">Restore</button>
+      <button class="btn-restore" id="restoreBtn" onclick="showDeclineReason()">Decline</button>
+    </div>
+    <div id="declineSection" class="decline-section">
+      <label>Why are you declining?</label>
+      <select id="declineReason">
+        <option value="">Select a reason</option>
+        <option value="Nothing changed">Nothing changed</option>
+        <option value="Too much was changed">Too much was changed</option>
+        <option value="The change is not correct">The change is not correct</option>
+        <option value="The change was only partially applied">The change was only partially applied</option>
+      </select>
+      <div class="decline-actions">
+        <button class="btn-restore" onclick="restoreFix()">Confirm Decline</button>
+        <button class="btn-cancel-decline" onclick="hideDeclineReason()">Cancel</button>
+      </div>
     </div>
   </div>
 </div>
@@ -741,9 +799,21 @@
     document.getElementById('formFields').classList.remove('collapsed');
   }
 
+  function showDeclineReason() {
+    document.getElementById('declineSection').classList.add('visible');
+    document.getElementById('fixActions').classList.remove('visible');
+  }
+
+  function hideDeclineReason() {
+    document.getElementById('declineSection').classList.remove('visible');
+    document.getElementById('fixActions').classList.add('visible');
+  }
+
   async function restoreFix() {
     if (!pendingRestoreIssue) return;
-    const btn = document.querySelector('.btn-restore');
+    const reason = document.getElementById('declineReason').value;
+    if (!reason) return showStatus('Please select a reason for declining.', 'error');
+    const btn = document.querySelector('.decline-actions .btn-restore');
     btn.textContent = 'Restoring…';
     btn.disabled = true;
     showStatus('Reverting back to previous state…', 'success');
@@ -755,8 +825,9 @@
       });
       fetch('/api/resolve', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ issueId: pendingRestoreIssue, accepted: false })
+        body: JSON.stringify({ issueId: pendingRestoreIssue, accepted: false, declineReason: reason })
       }).catch(() => {});
+      document.getElementById('declineSection').classList.remove('visible');
       document.getElementById('fixActions').classList.remove('visible');
       document.getElementById('fixNotice').classList.remove('visible');
       document.getElementById('refreshPrompt').classList.remove('visible');
