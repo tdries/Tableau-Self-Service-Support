@@ -480,10 +480,10 @@ const server = http.createServer((req, res) => {
 
   // --- GET /api/next-restore  (agent polls this) ---
   if (req.method === 'GET' && url.pathname === '/api/next-restore') {
-    const issueNumber = pendingRestores.shift();
-    if (issueNumber) {
+    const restore = pendingRestores.shift();
+    if (restore) {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      return res.end(JSON.stringify({ issueNumber }));
+      return res.end(JSON.stringify(restore));
     }
     res.writeHead(204); return res.end();
   }
@@ -494,10 +494,10 @@ const server = http.createServer((req, res) => {
     req.on('data', c => body += c);
     req.on('end', () => {
       try {
-        const { issueNumber } = JSON.parse(body);
+        const { issueNumber, tableauSite } = JSON.parse(body);
         if (!issueNumber) throw new Error('Missing issueNumber');
-        pendingRestores.push(issueNumber);
-        console.log(`[Restore] Queued restore for issue #${issueNumber}`);
+        pendingRestores.push({ issueNumber, tableauSite });
+        console.log(`[Restore] Queued restore for issue #${issueNumber} (site: ${tableauSite || 'default'})`);
         res.writeHead(204); res.end();
       } catch (e) {
         res.writeHead(400, { 'Content-Type': 'application/json' });

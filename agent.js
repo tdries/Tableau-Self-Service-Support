@@ -1336,6 +1336,9 @@ async function analyzeAndFixJira(issueKey, siteKey) {
     return;
   }
 
+  // Store backup for potential restore
+  backups.set(issueKey, { workbookId: workbook.id, projectId: workbook.project.id, name: workbook.name, originalBuffer });
+
   // Publish
   reportProgress(issueKey, 'Publishing fixed workbook to Tableau Cloud…', 90);
   try {
