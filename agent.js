@@ -334,10 +334,17 @@ function extractRelevantXml(xml) {
   if (filterMatches.length)
     sections.push(`<!-- FILTERS -->\n${cap(filterMatches.slice(0, 20).map(m => m[0].trim()).join('\n'), 2000)}`);
 
-  // Worksheet names — so TabServo knows what sheets already exist
-  const wsNames = [...xml.matchAll(/<worksheet name='([^']+)'/g)].map(m => m[1]);
-  if (wsNames.length)
-    sections.push(`<!-- EXISTING WORKSHEETS -->\n${wsNames.map(n => `<worksheet name='${n}'/>`).join('\n')}`);
+  // Full worksheet blocks — agent needs complete examples as templates for creating new sheets
+  const wsMatches = [...xml.matchAll(/<worksheet name='[^']*'>[\s\S]*?<\/worksheet>/g)];
+  if (wsMatches.length) {
+    // Include up to 2 full worksheets as templates + list remaining names
+    const fullSheets = wsMatches.slice(0, 2).map(m => m[0]);
+    const remainingNames = wsMatches.slice(2).map(m => m[0].match(/<worksheet name='([^']+)'/)?.[1]).filter(Boolean);
+    let wsSection = `<!-- WORKSHEETS (${wsMatches.length} total) -->\n${cap(fullSheets.join('\n'), 12000)}`;
+    if (remainingNames.length) wsSection += `\n<!-- Additional worksheets: ${remainingNames.join(', ')} -->`;
+    wsSection += `\n<!-- INSERT NEW WORKSHEETS BEFORE: </worksheets> -->`;
+    sections.push(wsSection);
+  }
 
   // Full dashboard sections — layout tree needed to add new sheets to dashboards
   const dashMatches = [...xml.matchAll(/<dashboard\b[\s\S]*?<\/dashboard>/g)];
@@ -440,9 +447,22 @@ Zone rules — violating these causes HTTP 400 on publish:
 - Worksheet zone: \`name\` must EXACTLY match the \`<worksheet name='...'>\` attribute
 
 ## ADDING A NEW WORKSHEET + DASHBOARD ZONE (do ALL of these)
-1. Insert \`<worksheet name='New Sheet'>\` block (with \`<simple-id uuid='...'>\`) inside \`<worksheets>\`
-2. Insert a \`<zone type-v2='worksheet' name='New Sheet' id='N' x='' y='' w='' h=''>\` inside dashboard \`<zones>\`
-3. Adjust sibling zone sizes so total w/h still fills the dashboard
+Use \`insert_after\` with an anchor that EXISTS VERBATIM in the XML.
+
+**Step 1 — Insert the new worksheet:**
+- Use \`"op": "insert_after"\` with \`"find"\` set to the COMPLETE closing \`</worksheet>\` tag of the LAST existing worksheet (copy the exact closing tag from the XML)
+- The \`"insert"\` must be a COMPLETE \`<worksheet>...</worksheet>\` block modeled on an existing worksheet in the XML
+- Copy the structure of an existing worksheet — include \`<table>\`, \`<view>\`, \`<datasource-dependencies>\`, \`<panes>\`, \`<rows>\`, \`<cols>\`, \`<simple-id>\`
+- Generate a NEW unique UUID for \`<simple-id>\`
+
+**Step 2 — Add the zone to the dashboard:**
+- Use \`"op": "insert_after"\` with \`"find"\` set to an existing \`</zone>\` closing tag of a SIBLING worksheet zone in the dashboard
+- Use a unique zone \`id\` (scan existing ids, pick the next available)
+- Set appropriate \`x\`, \`y\`, \`w\`, \`h\` values — split the space of a sibling zone
+
+**Step 3 — Resize sibling zones** to make room for the new zone
+
+CRITICAL: Every \`find\` string must appear VERBATIM in the raw XML. Use the exact XML provided — never fabricate or summarize tags.
 
 ## FILTERS
 \`\`\`xml
