@@ -309,13 +309,15 @@ function logFixResult(issueId, succeeded) {
 // When exact find fails, try to match by tag name + key attributes (id, name, column, etc.)
 function smartFind(xml, findStr) {
   // Exact match — always try first
-  if (xml.includes(findStr)) return findStr;
+  if (xml.includes(findStr)) {
+    console.log('    [smartFind] Exact match found');
+    return findStr;
+  }
+  console.log(`    [smartFind] Exact match FAILED for ${findStr.slice(0, 80)}...`);
 
   // Whitespace-normalized match — collapse runs of whitespace and try again
   const normalizeWs = s => s.replace(/\s+/g, ' ').trim();
   const findNorm = normalizeWs(findStr);
-  // Slide a window over the XML to find a whitespace-normalized match
-  // Only try this for shorter find strings (< 500 chars) to keep it fast
   if (findStr.length < 500) {
     const xmlLines = xml.split('\n');
     for (let i = 0; i < xmlLines.length; i++) {
@@ -323,57 +325,72 @@ function smartFind(xml, findStr) {
       for (let j = i; j < Math.min(i + 30, xmlLines.length); j++) {
         chunk += xmlLines[j] + '\n';
         if (normalizeWs(chunk) === findNorm) {
+          console.log('    [smartFind] Whitespace-normalized match found');
           return chunk.trimEnd();
         }
-        // Early exit if chunk already larger than needed
         if (chunk.length > findStr.length * 3) break;
       }
     }
+    console.log('    [smartFind] Whitespace-normalized match FAILED');
+  } else {
+    console.log(`    [smartFind] Skipping whitespace match (find string ${findStr.length} chars > 500)`);
   }
 
   // Extract tag name and key attributes from the find string
-  const tagMatch = findStr.match(/^<(\w+)\s/);
-  if (!tagMatch) return null;
+  const tagMatch = findStr.match(/^<(\w[\w-]*?)[\s>]/);
+  if (!tagMatch) { console.log('    [smartFind] No tag found in find string'); return null; }
   const tag = tagMatch[1];
 
-  // Extract identifying attributes (id, name, column are the most reliable)
   const attrs = {};
   for (const [, key, val] of findStr.matchAll(/\b(id|name|column|caption|uuid)='([^']+)'/g)) {
     attrs[key] = val;
   }
-  if (Object.keys(attrs).length === 0) return null;
+  console.log(`    [smartFind] Tag: ${tag}, attrs:`, attrs);
+  if (Object.keys(attrs).length === 0) { console.log('    [smartFind] No key attrs found'); return null; }
 
-  // Find all elements of this tag in the XML that match these attributes
-  // Use a regex that captures the full element (including children for non-self-closing)
-  const selfClosingRegex = new RegExp(`<${tag}\\b[^>]*${Object.entries(attrs).map(([k, v]) =>
-    `${k}='${v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}'`).join('[^>]*')}[^>]*/>`);
+  // Build attribute matching pattern — use [\s>] instead of \b to avoid zone-style matches
+  const attrPattern = Object.entries(attrs).map(([k, v]) =>
+    `${k}='${v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}'`).join('[^>]*');
+
+  // Try self-closing match
+  const selfClosingRegex = new RegExp(`<${tag}[\\s][^>]*${attrPattern}[^>]*/>`);
   const selfMatch = xml.match(selfClosingRegex);
-  if (selfMatch) return selfMatch[0];
+  if (selfMatch) {
+    console.log(`    [smartFind] Self-closing match: ${selfMatch[0].slice(0, 80)}...`);
+    return selfMatch[0];
+  }
 
-  // For elements with children, match the opening tag and find its closing tag
-  const openRegex = new RegExp(`<${tag}\\b[^>]*${Object.entries(attrs).map(([k, v]) =>
-    `${k}='${v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}'`).join('[^>]*')}[^>]*>`);
+  // Try open tag match
+  const openRegex = new RegExp(`<${tag}[\\s][^>]*${attrPattern}[^>]*>`);
   const openMatch = xml.match(openRegex);
-  if (!openMatch) return null;
+  if (!openMatch) {
+    console.log(`    [smartFind] Open tag match FAILED for <${tag}> with attrs ${JSON.stringify(attrs)}`);
+    // Debug: check if any element with this id exists at all
+    if (attrs.id) {
+      const anyId = xml.match(new RegExp(`id='${attrs.id}'`));
+      console.log(`    [smartFind] Any id='${attrs.id}' in XML: ${anyId ? 'YES at ' + anyId.index : 'NO'}`);
+    }
+    return null;
+  }
+  console.log(`    [smartFind] Open tag found: ${openMatch[0].slice(0, 100)}...`);
 
-  // Find matching closing tag by counting nesting depth
+  // Depth tracking
   const startIdx = xml.indexOf(openMatch[0]);
   let depth = 1;
   let pos = startIdx + openMatch[0].length;
-  // Match exact tag (not <zone-style when looking for <zone>). \b fails because - is a boundary.
   const openRe  = new RegExp(`<${tag}[\\s>]`, 'g');
   const closeRe = new RegExp(`</${tag}>`, 'g');
-  while (depth > 0 && pos < xml.length) {
+  let iterations = 0;
+  while (depth > 0 && pos < xml.length && iterations < 1000) {
     openRe.lastIndex = pos;
     closeRe.lastIndex = pos;
     const nextOpen  = openRe.exec(xml);
     const nextClose = closeRe.exec(xml);
-    if (!nextClose) break;
+    if (!nextClose) { console.log(`    [smartFind] Depth tracking: no close tag at pos ${pos}, depth=${depth}`); break; }
     if (nextOpen && nextOpen.index < nextClose.index) {
-      // Check if this is a self-closing tag (e.g. <zone ... />) — don't increment depth
       const tagEnd = xml.indexOf('>', nextOpen.index);
       if (tagEnd !== -1 && xml[tagEnd - 1] === '/') {
-        pos = tagEnd + 1; // Skip self-closing tag, depth unchanged
+        pos = tagEnd + 1;
       } else {
         depth++;
         pos = tagEnd + 1;
@@ -382,8 +399,13 @@ function smartFind(xml, findStr) {
       depth--;
       pos = nextClose.index + nextClose[0].length;
     }
+    iterations++;
   }
-  if (depth === 0) return xml.slice(startIdx, pos);
+  if (depth === 0) {
+    console.log(`    [smartFind] Depth tracking SUCCESS: ${pos - startIdx} chars, ${iterations} iterations`);
+    return xml.slice(startIdx, pos);
+  }
+  console.log(`    [smartFind] Depth tracking FAILED: depth=${depth} after ${iterations} iterations`);
   return null;
 }
 
