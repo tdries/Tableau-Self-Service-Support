@@ -309,6 +309,26 @@ function smartFind(xml, findStr) {
   // Exact match — always try first
   if (xml.includes(findStr)) return findStr;
 
+  // Whitespace-normalized match — collapse runs of whitespace and try again
+  const normalizeWs = s => s.replace(/\s+/g, ' ').trim();
+  const findNorm = normalizeWs(findStr);
+  // Slide a window over the XML to find a whitespace-normalized match
+  // Only try this for shorter find strings (< 500 chars) to keep it fast
+  if (findStr.length < 500) {
+    const xmlLines = xml.split('\n');
+    for (let i = 0; i < xmlLines.length; i++) {
+      let chunk = '';
+      for (let j = i; j < Math.min(i + 30, xmlLines.length); j++) {
+        chunk += xmlLines[j] + '\n';
+        if (normalizeWs(chunk) === findNorm) {
+          return chunk.trimEnd();
+        }
+        // Early exit if chunk already larger than needed
+        if (chunk.length > findStr.length * 3) break;
+      }
+    }
+  }
+
   // Extract tag name and key attributes from the find string
   const tagMatch = findStr.match(/^<(\w+)\s/);
   if (!tagMatch) return null;
