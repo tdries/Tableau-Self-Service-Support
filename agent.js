@@ -1034,15 +1034,24 @@ async function analyzeAndFixJira(issueKey, siteKey) {
 
 // ---- Restore handler ----
 async function handleRestore(issueNumber, siteKey) {
+  const restoreKey = `restore-${issueNumber}`;
   const backup = backups.get(issueNumber);
-  if (!backup) { console.log(`[Agent] No in-memory backup for issue #${issueNumber}`); return; }
+  if (!backup) {
+    reportProgress(restoreKey, 'No backup found for this issue', 100, 'error');
+    console.log(`[Agent] No in-memory backup for issue #${issueNumber}`);
+    return;
+  }
   console.log(`[Agent] Restoring issue #${issueNumber}...`);
+  reportProgress(restoreKey, 'Connecting to Tableau Cloud…', 15, 'info');
   try {
     const { token, siteId } = await tableauAuth(siteKey);
+    reportProgress(restoreKey, 'Publishing original workbook…', 50, 'info');
     await tableauPublish(token, siteId, backup.projectId, backup.name, backup.originalBuffer);
     backups.delete(issueNumber);
+    reportProgress(restoreKey, 'Workbook restored — you can now refresh your dashboard', 100, 'ok');
     console.log(`  → Restored ${backup.name}`);
   } catch (err) {
+    reportProgress(restoreKey, `Restore failed: ${err.message}`, 100, 'error');
     console.log(`  → Restore error: ${err.message}`);
   }
 }

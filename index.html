@@ -816,7 +816,24 @@
     const btn = document.querySelector('.decline-actions .btn-restore');
     btn.textContent = 'Restoring…';
     btn.disabled = true;
-    showStatus('Reverting back to previous state…', 'success');
+
+    // Reset activity log for restore progress
+    const fill = document.getElementById('activityFill');
+    const pctEl = document.getElementById('activityPct');
+    const logEl = document.getElementById('logEntries');
+    fill.style.width = '0%';
+    fill.classList.remove('done');
+    pctEl.textContent = '0%';
+    logEl.innerHTML = '';
+    document.getElementById('declineSection').classList.remove('visible');
+    document.getElementById('fixActions').classList.remove('visible');
+    document.getElementById('fixNotice').classList.remove('visible');
+    document.getElementById('refreshPrompt').classList.remove('visible');
+
+    // Listen for restore progress
+    const restoreKey = `restore-${pendingRestoreIssue}`;
+    startProgressTracking(restoreKey, 'Restoring workbook');
+
     try {
       await fetch('/api/restore', {
         method: 'POST',
@@ -827,10 +844,7 @@
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ issueId: pendingRestoreIssue, accepted: false, declineReason: reason })
       }).catch(() => {});
-      document.getElementById('declineSection').classList.remove('visible');
-      document.getElementById('fixActions').classList.remove('visible');
-      document.getElementById('fixNotice').classList.remove('visible');
-      document.getElementById('refreshPrompt').classList.remove('visible');
+      // Progress bar shows restore status — clean up state
       pendingRestoreIssue = null;
       pendingIssueUrl = null;
       localStorage.removeItem('pendingRestoreIssue');
