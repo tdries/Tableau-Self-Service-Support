@@ -441,6 +441,19 @@
       display: inline-block;
       vertical-align: middle;
     }
+
+    /* ── Form collapse after submit ── */
+    #formFields {
+      overflow: hidden;
+      max-height: 2000px;
+      transition: max-height 0.4s ease, opacity 0.3s ease;
+      opacity: 1;
+    }
+
+    #formFields.collapsed {
+      max-height: 0;
+      opacity: 0;
+    }
   </style>
 </head>
 <body>
@@ -455,6 +468,7 @@
   <div class="card-subtitle">The 1st level Tableau AI Support Solution</div>
   <hr class="divider" />
 
+  <div id="formFields">
   <div class="field">
     <label>Tableau Site</label>
     <select id="tableauSite">
@@ -505,6 +519,7 @@
   </div>
 
   <button class="submit-btn" id="submitBtn" onclick="submitIssue()">Submit Issue</button>
+  </div>
 
   <div id="status" class="status"></div>
 
@@ -620,6 +635,7 @@
         showStatus(`Issue <a href="${data.html_url}" target="_blank">#${data.number}</a> created successfully.`, 'success');
       }
 
+      document.getElementById('formFields').classList.add('collapsed');
       document.getElementById('issueTitle').value = '';
       document.getElementById('issueBody').value = '';
       document.getElementById('issueCategory').value = '';
@@ -707,6 +723,7 @@
     localStorage.removeItem('pendingRestoreIssue');
     localStorage.removeItem('pendingIssueUrl');
     showStatus('Thank you, your case has been logged as closed.' + link, 'success');
+    document.getElementById('formFields').classList.remove('collapsed');
   }
 
   async function restoreFix() {
@@ -732,6 +749,7 @@
       pendingIssueUrl = null;
       localStorage.removeItem('pendingRestoreIssue');
       localStorage.removeItem('pendingIssueUrl');
+      document.getElementById('formFields').classList.remove('collapsed');
     } catch (e) {
       btn.textContent = 'Restore';
       btn.disabled = false;
