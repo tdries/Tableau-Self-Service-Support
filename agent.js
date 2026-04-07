@@ -303,6 +303,59 @@ function logFixResult(issueId, succeeded) {
   r.end();
 }
 
+// ---- Smart XML matching ----
+// When exact find fails, try to match by tag name + key attributes (id, name, column, etc.)
+function smartFind(xml, findStr) {
+  // Exact match — always try first
+  if (xml.includes(findStr)) return findStr;
+
+  // Extract tag name and key attributes from the find string
+  const tagMatch = findStr.match(/^<(\w+)\s/);
+  if (!tagMatch) return null;
+  const tag = tagMatch[1];
+
+  // Extract identifying attributes (id, name, column are the most reliable)
+  const attrs = {};
+  for (const [, key, val] of findStr.matchAll(/\b(id|name|column|caption|uuid)='([^']+)'/g)) {
+    attrs[key] = val;
+  }
+  if (Object.keys(attrs).length === 0) return null;
+
+  // Find all elements of this tag in the XML that match these attributes
+  // Use a regex that captures the full element (including children for non-self-closing)
+  const selfClosingRegex = new RegExp(`<${tag}\\b[^>]*${Object.entries(attrs).map(([k, v]) =>
+    `${k}='${v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}'`).join('[^>]*')}[^>]*/>`);
+  const selfMatch = xml.match(selfClosingRegex);
+  if (selfMatch) return selfMatch[0];
+
+  // For elements with children, match the opening tag and find its closing tag
+  const openRegex = new RegExp(`<${tag}\\b[^>]*${Object.entries(attrs).map(([k, v]) =>
+    `${k}='${v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}'`).join('[^>]*')}[^>]*>`);
+  const openMatch = xml.match(openRegex);
+  if (!openMatch) return null;
+
+  // Find matching closing tag by counting nesting depth
+  const startIdx = xml.indexOf(openMatch[0]);
+  let depth = 1;
+  let pos = startIdx + openMatch[0].length;
+  const openTag = `<${tag}`;
+  const closeTag = `</${tag}>`;
+  while (depth > 0 && pos < xml.length) {
+    const nextOpen  = xml.indexOf(openTag, pos);
+    const nextClose = xml.indexOf(closeTag, pos);
+    if (nextClose === -1) break;
+    if (nextOpen !== -1 && nextOpen < nextClose) {
+      depth++;
+      pos = nextOpen + openTag.length;
+    } else {
+      depth--;
+      pos = nextClose + closeTag.length;
+    }
+  }
+  if (depth === 0) return xml.slice(startIdx, pos);
+  return null;
+}
+
 // ---- XML helpers ----
 function validateXml(xml) {
   if (!xml.includes('<workbook') || !xml.includes('</workbook>'))
@@ -685,18 +738,22 @@ Omit \`replace\` for delete ops, omit \`insert\` for replace ops. Use \`insert_b
       continue;
     }
 
-    const anchor = fix.find ? fix.find.slice(0, 80) + (fix.find.length > 80 ? '…' : '') : '';
+    if (!fix.find) { log.push(`⚠️ Missing find string for ${op}`); continue; }
+    const actual = smartFind(xml, fix.find);
+    const anchor = fix.find.slice(0, 80) + (fix.find.length > 80 ? '…' : '');
 
-    if (!fix.find || !xml.includes(fix.find)) {
+    if (!actual) {
       log.push(`⚠️ Not found (${op}): \`${anchor}\``);
       console.log(`  → Could not locate fix string for op: ${op}`);
       continue;
     }
 
-    if      (op === 'replace')       xml = xml.split(fix.find).join(fix.replace);
-    else if (op === 'insert_after')  xml = xml.split(fix.find).join(fix.find + fix.insert);
-    else if (op === 'insert_before') xml = xml.split(fix.find).join(fix.insert + fix.find);
-    else if (op === 'delete')        xml = xml.split(fix.find).join('');
+    if (actual !== fix.find) console.log(`  → Smart-matched by attributes (exact match failed)`);
+
+    if      (op === 'replace')       xml = xml.split(actual).join(fix.replace || '');
+    else if (op === 'insert_after')  xml = xml.split(actual).join(actual + fix.insert);
+    else if (op === 'insert_before') xml = xml.split(actual).join(fix.insert + actual);
+    else if (op === 'delete')        xml = xml.split(actual).join('');
     else { log.push(`⚠️ Unknown op \`${op}\``); continue; }
 
     applied++;
@@ -949,12 +1006,17 @@ async function analyzeAndFixJira(issueKey, siteKey) {
       continue;
     }
 
-    const anchor = fix.find ? fix.find.slice(0, 80) + (fix.find.length > 80 ? '…' : '') : '';
-    if (!fix.find || !xml.includes(fix.find)) { log.push(`Not found (${op}): ${anchor}`); continue; }
-    if      (op === 'replace')       xml = xml.split(fix.find).join(fix.replace);
-    else if (op === 'insert_after')  xml = xml.split(fix.find).join(fix.find + fix.insert);
-    else if (op === 'insert_before') xml = xml.split(fix.find).join(fix.insert + fix.find);
-    else if (op === 'delete')        xml = xml.split(fix.find).join('');
+    if (!fix.find) { log.push(`Missing find string for ${op}`); continue; }
+    const actual = smartFind(xml, fix.find);
+    const anchor = fix.find.slice(0, 80) + (fix.find.length > 80 ? '…' : '');
+
+    if (!actual) { log.push(`Not found (${op}): ${anchor}`); continue; }
+    if (actual !== fix.find) console.log(`  → Smart-matched by attributes (exact match failed)`);
+
+    if      (op === 'replace')       xml = xml.split(actual).join(fix.replace || '');
+    else if (op === 'insert_after')  xml = xml.split(actual).join(actual + fix.insert);
+    else if (op === 'insert_before') xml = xml.split(actual).join(fix.insert + actual);
+    else if (op === 'delete')        xml = xml.split(actual).join('');
     else { log.push(`Unknown op: ${op}`); continue; }
     applied++;
     log.push(`Applied ${op}: ${anchor}`);
