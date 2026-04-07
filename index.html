@@ -696,9 +696,9 @@
     document.getElementById('fixNotice').classList.remove('visible');
     document.getElementById('refreshPrompt').classList.remove('visible');
     if (pendingRestoreIssue) {
-      fetch(`/api/log/${encodeURIComponent(pendingRestoreIssue)}`, {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accepted: true })
+      fetch('/api/resolve', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ issueId: pendingRestoreIssue, accepted: true })
       }).catch(() => {});
     }
     const link = pendingIssueUrl ? ` <a href="${pendingIssueUrl}" target="_blank">View ticket</a>` : '';
@@ -721,9 +721,9 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ issueNumber: pendingRestoreIssue })
       });
-      fetch(`/api/log/${encodeURIComponent(pendingRestoreIssue)}`, {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accepted: false })
+      fetch('/api/resolve', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ issueId: pendingRestoreIssue, accepted: false })
       }).catch(() => {});
       document.getElementById('fixActions').classList.remove('visible');
       document.getElementById('fixNotice').classList.remove('visible');

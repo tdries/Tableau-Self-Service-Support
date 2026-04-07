@@ -182,6 +182,29 @@ function jiraRequest(method, path, body, callback) {
   req.end();
 }
 
+// ---- Jira comment + transition helpers ----
+function jiraCommentAdf(issueKey, adfContent, callback) {
+  jiraRequest('POST', `/rest/api/3/issue/${issueKey}/comment`, {
+    body: { type: 'doc', version: 1, content: adfContent }
+  }, callback);
+}
+
+function jiraTransition(issueKey, transitionName, callback) {
+  // First get available transitions
+  jiraRequest('GET', `/rest/api/3/issue/${issueKey}/transitions`, null, (err, status, data) => {
+    if (err) return callback(err);
+    const transitions = data.transitions || [];
+    const match = transitions.find(t => t.name.toLowerCase() === transitionName.toLowerCase());
+    if (!match) {
+      console.log(`[Jira] Available transitions for ${issueKey}:`, transitions.map(t => `${t.name} (${t.id})`).join(', '));
+      return callback(new Error(`Transition "${transitionName}" not found`));
+    }
+    jiraRequest('POST', `/rest/api/3/issue/${issueKey}/transitions`, {
+      transition: { id: match.id }
+    }, callback);
+  });
+}
+
 // ---- Jira Issues proxy ----
 function createJiraIssue(payload, callback) {
   const { title, description } = payload;
@@ -431,6 +454,60 @@ const server = http.createServer((req, res) => {
         pendingRestores.push(issueNumber);
         console.log(`[Restore] Queued restore for issue #${issueNumber}`);
         res.writeHead(204); res.end();
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    });
+    return;
+  }
+
+  // --- POST /api/resolve  (accept or restore — comments + transitions Jira) ---
+  if (req.method === 'POST' && url.pathname === '/api/resolve') {
+    let body = '';
+    req.on('data', c => body += c);
+    req.on('end', () => {
+      try {
+        const { issueId, accepted } = JSON.parse(body);
+        if (!issueId) throw new Error('Missing issueId');
+
+        // Update local log
+        updateLog(issueId, { accepted });
+
+        // If it's a Jira issue (keys like BTSA-24), comment + transition
+        if (/^[A-Z]+-\d+$/.test(issueId)) {
+          const adf = accepted ? [
+            { type: 'paragraph', content: [{ type: 'text', text: `Dear user,` }] },
+            { type: 'paragraph', content: [{ type: 'text', text: 'We are happy to inform you that the proposed change has been accepted. The fix is now live on your Tableau dashboard.' }] },
+            { type: 'paragraph', content: [{ type: 'text', text: 'We will proceed to close this ticket. Should you need further assistance, please do not hesitate to open a new request.' }] },
+            { type: 'rule' },
+            { type: 'paragraph', content: [{ type: 'text', text: 'TabServo — Biztory Tableau AI Support', marks: [{ type: 'strong' }] }] }
+          ] : [
+            { type: 'paragraph', content: [{ type: 'text', text: `Dear user,` }] },
+            { type: 'paragraph', content: [{ type: 'text', text: 'We have been informed that the proposed change was declined. Your workbook has been restored to its previous state.' }] },
+            { type: 'paragraph', content: [{ type: 'text', text: 'This ticket will be moved to our backlog and a human support agent will follow up with you shortly.' }] },
+            { type: 'rule' },
+            { type: 'paragraph', content: [{ type: 'text', text: 'TabServo — Biztory Tableau AI Support', marks: [{ type: 'strong' }] }] }
+          ];
+
+          jiraCommentAdf(issueId, adf, (err) => {
+            if (err) console.error(`[Jira] Comment error: ${err.message}`);
+          });
+
+          const targetStatus = accepted ? 'Done' : 'Declined';
+          jiraTransition(issueId, targetStatus, (err) => {
+            if (err) console.log(`[Jira] Transition to "${targetStatus}" failed: ${err.message} — will try common alternatives`);
+            // If exact name didn't match, try common alternatives
+            if (err && accepted) {
+              jiraTransition(issueId, 'Resolve', (e2) => {
+                if (e2) jiraTransition(issueId, 'Close', () => {});
+              });
+            }
+          });
+        }
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true }));
       } catch (e) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: e.message }));

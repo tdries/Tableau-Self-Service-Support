@@ -150,10 +150,32 @@ function jira(method, endpoint, body) {
   }, data);
 }
 
-function jiraComment(issueKey, text) {
+function jiraComment(issueKey, adfContent) {
+  // Accept either a plain string or pre-built ADF content array
+  const content = typeof adfContent === 'string'
+    ? adfContent.split('\n\n').map(p => ({ type: 'paragraph', content: [{ type: 'text', text: p }] }))
+    : adfContent;
   return jira('POST', `/rest/api/3/issue/${issueKey}/comment`, {
-    body: { type: 'doc', version: 1, content: [{ type: 'paragraph', content: [{ type: 'text', text }] }] }
+    body: { type: 'doc', version: 1, content }
   });
+}
+
+// Build rich ADF content helpers
+function adfParagraph(...parts) {
+  return { type: 'paragraph', content: parts };
+}
+function adfText(text, bold = false) {
+  const node = { type: 'text', text };
+  if (bold) node.marks = [{ type: 'strong' }];
+  return node;
+}
+function adfRule() {
+  return { type: 'rule' };
+}
+function adfBulletList(items) {
+  return { type: 'bulletList', content: items.map(text => ({
+    type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text }] }]
+  }))};
 }
 
 function adfToText(node) {
@@ -664,6 +686,7 @@ async function analyzeAndFixJira(issueKey, siteKey) {
 
   const title    = issue.fields.summary;
   const descText = adfToText(issue.fields.description);
+  const reporter = issue.fields.reporter?.displayName?.split(' ')[0] || 'there';
 
   // Step 1 — interpretation comment
   reportProgress(issueKey, 'Interpreting issue…', 8);
@@ -673,12 +696,12 @@ async function analyzeAndFixJira(issueKey, siteKey) {
       model: 'claude-opus-4-6',
       max_tokens: 300,
       messages: [{ role: 'user', content:
-        `You are TabServo, a Tableau support AI. A user submitted this issue:\n\nTitle: ${title}\nDescription: ${descText.slice(0, 800)}\n\nWrite a brief, professional comment (2-3 sentences) that: restates how you understand the problem, and confirms you are now starting to work on it.`
+        `You are TabServo, a Tableau support AI by Biztory. A user named ${reporter} submitted this issue:\n\nTitle: ${title}\nDescription: ${descText.slice(0, 800)}\n\nWrite a professional Jira comment (3-4 sentences) that:\n1. Opens with "Dear ${reporter},"\n2. Thanks them for reaching out\n3. Restates how you understand the problem\n4. Confirms you are now analyzing the workbook and will follow up shortly\n\nKeep the tone warm but professional. Do not use emojis.`
       }]
     });
     interpretation = msg.content[0].text.trim();
   } catch {
-    interpretation = `Hi, I've received your issue "${title}" and I'm starting to analyze it now.`;
+    interpretation = `Dear ${reporter},\n\nThank you for reaching out. We have received your issue "${title}" and are now analyzing your workbook. We will follow up shortly with our findings.`;
   }
 
   await jiraComment(issueKey, interpretation);
@@ -688,7 +711,13 @@ async function analyzeAndFixJira(issueKey, siteKey) {
   const workbookName = extractWorkbookName(descText);
   if (!workbookName) {
     reportProgress(issueKey, 'No workbook name found in issue', 100, 'warn');
-    await jiraComment(issueKey, 'I could not find a workbook name in your issue. Please resubmit and include the workbook name.');
+    await jiraComment(issueKey, [
+      adfParagraph(adfText(`Dear ${reporter},`)),
+      adfParagraph(adfText('We were unable to identify a workbook name in your request. Could you please resubmit your issue and include the exact name of the Tableau workbook you need help with?')),
+      adfParagraph(adfText('Thank you for your patience.')),
+      adfRule(),
+      adfParagraph(adfText('TabServo — Biztory Tableau AI Support', true))
+    ]);
     return;
   }
 
@@ -700,7 +729,13 @@ async function analyzeAndFixJira(issueKey, siteKey) {
     console.log(`  → Found: ${workbook.name} (${workbook.id})`);
   } catch (err) {
     reportProgress(issueKey, `Error: ${err.message}`, 100, 'error');
-    await jiraComment(issueKey, `Agent error: ${err.message}`);
+    await jiraComment(issueKey, [
+      adfParagraph(adfText(`Dear ${reporter},`)),
+      adfParagraph(adfText('We encountered an issue while connecting to Tableau Cloud to locate your workbook. Our team has been notified and will investigate further.')),
+      adfParagraph(adfText('Error details: ', true), adfText(err.message)),
+      adfRule(),
+      adfParagraph(adfText('TabServo — Biztory Tableau AI Support', true))
+    ]);
     return;
   }
 
@@ -712,7 +747,13 @@ async function analyzeAndFixJira(issueKey, siteKey) {
     console.log(`  → Downloaded (${Math.round(originalBuffer.length / 1024)}KB)`);
   } catch (err) {
     reportProgress(issueKey, `Error: ${err.message}`, 100, 'error');
-    await jiraComment(issueKey, `Could not download workbook: ${err.message}`);
+    await jiraComment(issueKey, [
+      adfParagraph(adfText(`Dear ${reporter},`)),
+      adfParagraph(adfText('We were unable to download your workbook from Tableau Cloud. This may be a temporary issue. Our team has been notified.')),
+      adfParagraph(adfText('Error details: ', true), adfText(err.message)),
+      adfRule(),
+      adfParagraph(adfText('TabServo — Biztory Tableau AI Support', true))
+    ]);
     return;
   }
 
@@ -724,7 +765,13 @@ async function analyzeAndFixJira(issueKey, siteKey) {
     console.log(`  → Unpacked XML (${Math.round(wb.twbXml.length / 1024)}KB)`);
   } catch (err) {
     reportProgress(issueKey, `Error: ${err.message}`, 100, 'error');
-    await jiraComment(issueKey, `Could not read workbook: ${err.message}`);
+    await jiraComment(issueKey, [
+      adfParagraph(adfText(`Dear ${reporter},`)),
+      adfParagraph(adfText('We were unable to read the contents of your workbook. The file may be in an unexpected format. Our team has been notified and will follow up.')),
+      adfParagraph(adfText('Error details: ', true), adfText(err.message)),
+      adfRule(),
+      adfParagraph(adfText('TabServo — Biztory Tableau AI Support', true))
+    ]);
     return;
   }
 
@@ -745,7 +792,13 @@ async function analyzeAndFixJira(issueKey, siteKey) {
     result = safeParseJson(msg.content[0].text.trim());
   } catch (err) {
     reportProgress(issueKey, `Error: ${err.message}`, 100, 'error');
-    await jiraComment(issueKey, `Agent error during analysis: ${err.message}`);
+    await jiraComment(issueKey, [
+      adfParagraph(adfText(`Dear ${reporter},`)),
+      adfParagraph(adfText('We encountered an issue while analyzing your workbook. Our team has been notified and will investigate manually.')),
+      adfParagraph(adfText('Error details: ', true), adfText(err.message)),
+      adfRule(),
+      adfParagraph(adfText('TabServo — Biztory Tableau AI Support', true))
+    ]);
     return;
   }
 
@@ -753,7 +806,14 @@ async function analyzeAndFixJira(issueKey, siteKey) {
 
   if (!result.fixes || result.fixes.length === 0) {
     reportProgress(issueKey, 'No automatic fix found — manual review needed', 100, 'warn');
-    await jiraComment(issueKey, `No automatic fix applied.\n\n${result.analysis}\n\n${result.comment || ''}`);
+    await jiraComment(issueKey, [
+      adfParagraph(adfText(`Dear ${reporter},`)),
+      adfParagraph(adfText('After analyzing your workbook, we were unable to apply an automatic fix for this issue. Your ticket will remain open and a human support agent will review it.')),
+      adfParagraph(adfText('Our analysis: ', true), adfText(result.analysis)),
+      ...(result.comment ? [adfParagraph(adfText(result.comment))] : []),
+      adfRule(),
+      adfParagraph(adfText('TabServo — Biztory Tableau AI Support', true))
+    ]);
     return;
   }
 
@@ -777,7 +837,14 @@ async function analyzeAndFixJira(issueKey, siteKey) {
 
   if (applied === 0) {
     reportProgress(issueKey, 'Fix could not be located in workbook XML', 100, 'warn');
-    await jiraComment(issueKey, `Fix identified but could not be applied.\n\nAnalysis: ${result.analysis}\n\n${log.join('\n')}`);
+    await jiraComment(issueKey, [
+      adfParagraph(adfText(`Dear ${reporter},`)),
+      adfParagraph(adfText('We identified a potential fix but were unable to locate the exact XML elements in your workbook to apply it. Your ticket will remain open for manual review.')),
+      adfParagraph(adfText('Our analysis: ', true), adfText(result.analysis)),
+      adfBulletList(log),
+      adfRule(),
+      adfParagraph(adfText('TabServo — Biztory Tableau AI Support', true))
+    ]);
     return;
   }
 
@@ -786,7 +853,13 @@ async function analyzeAndFixJira(issueKey, siteKey) {
   const validation = validateXml(xml);
   if (!validation.valid) {
     reportProgress(issueKey, 'Fix produced invalid XML — not applied', 100, 'error');
-    await jiraComment(issueKey, `Fix produced invalid XML and was not applied.\n\n${validation.error}`);
+    await jiraComment(issueKey, [
+      adfParagraph(adfText(`Dear ${reporter},`)),
+      adfParagraph(adfText('We generated a fix for your issue, but it produced invalid workbook XML and was not applied to protect your data. Your ticket will remain open for manual review.')),
+      adfParagraph(adfText('Validation details: ', true), adfText(validation.error)),
+      adfRule(),
+      adfParagraph(adfText('TabServo — Biztory Tableau AI Support', true))
+    ]);
     return;
   }
 
@@ -807,11 +880,26 @@ async function analyzeAndFixJira(issueKey, siteKey) {
     console.log('  → Published to Tableau Cloud');
   } catch (err) {
     reportProgress(issueKey, `Error publishing: ${err.message}`, 100, 'error');
-    await jiraComment(issueKey, `Fix generated but publishing failed: ${err.message}`);
+    await jiraComment(issueKey, [
+      adfParagraph(adfText(`Dear ${reporter},`)),
+      adfParagraph(adfText('We successfully generated a fix for your workbook, but encountered an error while publishing it back to Tableau Cloud. Our team has been notified and will resolve this manually.')),
+      adfParagraph(adfText('Error details: ', true), adfText(err.message)),
+      adfRule(),
+      adfParagraph(adfText('TabServo — Biztory Tableau AI Support', true))
+    ]);
     return;
   }
 
-  await jiraComment(issueKey, `Fix applied automatically by TabServo.\n\n${result.comment}\n\nChanges (${applied}/${result.fixes.length}):\n${log.join('\n')}\n\nThe workbook has been republished to Tableau Cloud. Reload your dashboard to see the changes.`);
+  await jiraComment(issueKey, [
+    adfParagraph(adfText(`Dear ${reporter},`)),
+    adfParagraph(adfText('Great news — we have automatically resolved your issue and republished the updated workbook to Tableau Cloud.')),
+    adfParagraph(adfText('What was changed: ', true), adfText(result.comment || result.analysis)),
+    adfParagraph(adfText(`Changes applied (${applied}/${result.fixes.length}):`, true)),
+    adfBulletList(log),
+    adfParagraph(adfText('Next steps: ', true), adfText('Please reload your Tableau dashboard to review the changes. You can then accept the fix or restore the previous version directly from the TabServo extension.')),
+    adfRule(),
+    adfParagraph(adfText('TabServo — Biztory Tableau AI Support', true))
+  ]);
   reportProgress(issueKey, 'Fix published — reload your dashboard', 100, 'ok', { hasBackup: true, issueNumber: issueKey });
   logFixResult(issueKey, true);
   console.log(`  → Done. ${issueKey} fixed.`);
