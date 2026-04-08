@@ -84,7 +84,7 @@ async function claudeCreate(params, retries = 5) {
       const is529 = status === 529 || String(err?.message).includes('overloaded');
       const is429 = status === 429 || String(err?.message).includes('rate_limit');
       if ((is529 || is429) && i < retries) {
-        const wait = is429 ? 60000 * (i + 1) : 15000 * (i + 1); // 429: 60s, 120s, ... | 529: 15s, 30s, ...
+        const wait = is429 ? 20000 * (i + 1) : 10000 * (i + 1); // 429: 20s, 40s, 60s | 529: 10s, 20s, 30s
         console.log(`  [Claude] ${is429 ? '429 rate limit' : '529 overloaded'} — retrying in ${wait / 1000}s (attempt ${i + 1}/${retries})`);
         await new Promise(r => setTimeout(r, wait));
       } else {
