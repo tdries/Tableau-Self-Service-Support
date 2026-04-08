@@ -753,22 +753,25 @@
       ? `<a href="${pendingIssueUrl}" target="_blank">${issueNumber}</a>`
       : issueNumber;
 
+    let completed = false;
     const es = new EventSource(`/api/progress/${issueNumber}`);
-    es.onmessage = (e) => {
-      const { step, pct, type, hasBackup, issueNumber: issNum } = JSON.parse(e.data);
+
+    function handleEvent(step, pct, type, hasBackup, issNum) {
+      if (completed) return;
 
       if (pct >= 100 && type !== 'ok') {
-        // Friendly message for end users — hide technical errors
+        completed = true;
         console.warn(`[TabServo debug] ${step}`);
         addEntry('Forwarded to a human agent for closer investigation', pct, 'info');
         es.close();
-        showStatus(`TabServo has analyzed your issue and has decided to forward it to a human support agent for closer investigation. Thank you for logging this ticket. ${ticketLink}`, 'success');
+        showStatus(`TabServo has decided to pass this request to a human support agent. Please check your Jira ticket for more information and follow up on your request. ${ticketLink}`, 'success');
         document.getElementById('formFields').classList.remove('collapsed');
         return;
       }
 
       addEntry(step, pct, type || 'info');
       if (pct >= 100) {
+        completed = true;
         es.close();
         if (type === 'ok' && hasBackup && issNum) {
           pendingRestoreIssue = issNum;
@@ -776,8 +779,35 @@
           document.getElementById('refreshPrompt').classList.add('visible');
         }
       }
+    }
+
+    es.onmessage = (e) => {
+      const { step, pct, type, hasBackup, issueNumber: issNum } = JSON.parse(e.data);
+      handleEvent(step, pct, type, hasBackup, issNum);
     };
-    es.onerror = () => es.close();
+
+    // Don't close on error — let EventSource auto-reconnect and replay from buffer
+    es.onerror = () => { console.log('[SSE] Connection lost, will auto-reconnect...'); };
+
+    // Polling fallback: if SSE goes silent for 60s, poll the buffer directly
+    let lastEventTime = Date.now();
+    es.addEventListener('message', () => { lastEventTime = Date.now(); });
+
+    const pollInterval = setInterval(async () => {
+      if (completed) { clearInterval(pollInterval); return; }
+      if (Date.now() - lastEventTime < 60000) return; // SSE still alive
+      try {
+        const resp = await fetch(`/api/progress-check/${issueNumber}`);
+        if (resp.ok) {
+          const events = await resp.json();
+          const last = events[events.length - 1];
+          if (last && last.pct >= 100) {
+            handleEvent(last.step, last.pct, last.type, last.hasBackup, last.issueNumber);
+            clearInterval(pollInterval);
+          }
+        }
+      } catch {}
+    }, 15000);
   }
 
   function acceptFix() {

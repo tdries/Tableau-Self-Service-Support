@@ -270,6 +270,14 @@ function ssePush(issueNumber, payload) {
   }
 }
 
+  // --- GET /api/progress-check/:id  (polling fallback for SSE) ---
+  if (req.method === 'GET' && url.pathname.startsWith('/api/progress-check/')) {
+    const issueId = url.pathname.split('/').pop();
+    const events = sseBuffer.get(String(issueId)) || [];
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify(events));
+  }
+
 // ---- Jira helpers ----
 function jiraRequest(method, path, body, callback) {
   const auth = Buffer.from(`${JIRA_EMAIL}:${JIRA_TOKEN}`).toString('base64');
