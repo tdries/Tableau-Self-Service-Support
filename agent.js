@@ -910,7 +910,7 @@ async function analyzeAndFix(issue, siteKey) {
   const issueText = issue.body.split('---')[0].trim();
 
   // ---- PASS 1: Identify what sections the AI needs ----
-  reportProgress(n, 'Analyzing workbook structure…', 35);
+  reportProgress(n, 'Scanning workbook structure…', 35);
   const overview = buildWorkbookOverview(wb.twbXml);
   let targets;
   try {
@@ -928,10 +928,16 @@ async function analyzeAndFix(issue, siteKey) {
     console.log('  → Pass 1 failed, using legacy extraction');
   }
 
+  if (targets.length) {
+    reportProgress(n, `Identified relevant sections: ${targets.map(t => t.name).join(', ')}`, 40);
+  }
+
   // ---- PASS 2: Extract targeted full XML ----
-  reportProgress(n, 'TabServo is analyzing the issue…', 45);
-  console.log('  → Calling Biztory AI...');
   const targetedXml = targets.length ? extractTargetedXml(wb.twbXml, targets) : extractRelevantXml(wb.twbXml);
+  const xmlSizeKB = Math.round(targetedXml.length / 1024);
+  reportProgress(n, `Reading ${xmlSizeKB}KB of workbook XML…`, 45);
+  reportProgress(n, 'TabServo is diagnosing the issue…', 50);
+  console.log('  → Calling Biztory AI...');
 
   let result;
   try {
@@ -967,6 +973,7 @@ async function analyzeAndFix(issue, siteKey) {
   }
 
   console.log(`  → Analysis: ${result.analysis}`);
+  reportProgress(n, `Diagnosis: ${result.analysis}`, 60);
 
   if (!result.fixes || result.fixes.length === 0) {
     reportProgress(n, 'No automatic fix found — manual review needed', 100, 'warn');
@@ -1212,7 +1219,7 @@ async function analyzeAndFixJira(issueKey, siteKey) {
   const issueText = descText.split('---')[0].trim();
 
   // ---- PASS 1: Identify what sections the AI needs ----
-  reportProgress(issueKey, 'Analyzing workbook structure…', 35);
+  reportProgress(issueKey, 'Scanning workbook structure…', 35);
   const overview = buildWorkbookOverview(wb.twbXml);
   let targets;
   try {
@@ -1230,9 +1237,18 @@ async function analyzeAndFixJira(issueKey, siteKey) {
     console.log('  → Pass 1 failed, using legacy extraction');
   }
 
+  // Show which sections were identified
+  if (targets.length) {
+    const targetNames = targets.map(t => t.name).join(', ');
+    reportProgress(issueKey, `Identified relevant sections: ${targetNames}`, 40);
+  }
+
   // ---- PASS 2: Extract targeted full XML and analyze ----
-  reportProgress(issueKey, 'TabServo is analyzing the workbook…', 45);
   const targetedXml = targets.length ? extractTargetedXml(wb.twbXml, targets) : extractRelevantXml(wb.twbXml);
+  const xmlSizeKB = Math.round(targetedXml.length / 1024);
+  reportProgress(issueKey, `Reading ${xmlSizeKB}KB of workbook XML…`, 45);
+
+  reportProgress(issueKey, 'TabServo is diagnosing the issue…', 50);
 
   let result;
   try {
@@ -1268,6 +1284,7 @@ async function analyzeAndFixJira(issueKey, siteKey) {
   }
 
   console.log(`  → Analysis: ${result.analysis}`);
+  reportProgress(issueKey, `Diagnosis: ${result.analysis}`, 60);
 
   if (!result.fixes || result.fixes.length === 0) {
     reportProgress(issueKey, 'No automatic fix found — manual review needed', 100, 'warn');
