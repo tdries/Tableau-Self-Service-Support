@@ -1288,6 +1288,9 @@ async function analyzeAndFixJira(issueKey, siteKey) {
     result = safeParseJson(msg.content[0].text.trim());
   } catch (err) {
     console.log(`  → Analysis error (internal): ${err.message}`);
+    logFixResult(issueKey, false);
+    // Store internal error in log for debugging (not shown to user)
+    reportProgress(issueKey, `[internal] ${err.message}`, 99, 'info');
     reportProgress(issueKey, 'Forwarding to human support agent', 100, 'error');
     await jiraComment(issueKey, [
       adfParagraph(adfText(`Dear ${reporter},`)),
