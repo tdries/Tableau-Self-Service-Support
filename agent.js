@@ -998,30 +998,54 @@ async function analyzeAndFix(issue, siteKey) {
       const dashName = fix.dashboard;
       const zoneXml  = fix.zone;
       if (!dashName || !zoneXml) { log.push(`⚠️ add_dashboard_zone: missing dashboard or zone`); continue; }
-      // Extract the dashboard section
       const dashRegex = new RegExp(`<dashboard[^>]*name='${dashName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}'[\\s\\S]*?</dashboard>`);
       const dashMatch = xml.match(dashRegex);
       if (!dashMatch) { log.push(`⚠️ Dashboard '${dashName}' not found`); continue; }
       const dashXml = dashMatch[0];
-      // Find the last worksheet zone's closing </zone> inside the dashboard
-      // Worksheet zones have a name= attribute and no type-v2= (or type-v2='worksheet')
-      const wsZoneCloses = [...dashXml.matchAll(/<zone[^>]+name='[^']+(?:(?!type-v2)|[^>]*type-v2='worksheet')[^>]*>[\s\S]*?<\/zone>/g)];
-      let updatedDash;
-      if (wsZoneCloses.length) {
-        // Insert after the last worksheet zone
-        const lastWsZone = wsZoneCloses[wsZoneCloses.length - 1][0];
-        updatedDash = dashXml.replace(lastWsZone, lastWsZone + '\n              ' + zoneXml);
-      } else {
-        // Fallback: insert before the first </zone> closing inside <zones>
-        const zonesMatch = dashXml.match(/<zones>[\s\S]*?<\/zones>/);
-        if (!zonesMatch) { log.push(`⚠️ No <zones> found in dashboard '${dashName}'`); continue; }
-        const zonesXml = zonesMatch[0];
-        // Find the last </zone> before </zones>
-        const lastCloseIdx = zonesXml.lastIndexOf('</zone>', zonesXml.lastIndexOf('</zones>'));
-        if (lastCloseIdx === -1) { log.push(`⚠️ No zones to anchor in dashboard '${dashName}'`); continue; }
-        const updatedZones = zonesXml.slice(0, lastCloseIdx) + zoneXml + '\n            ' + zonesXml.slice(lastCloseIdx);
-        updatedDash = dashXml.replace(zonesXml, updatedZones);
+
+      // Find the main layout-flow container (param='vert' or 'horz') that holds worksheet zones.
+      // Strategy: find the first layout-flow zone that directly contains a worksheet zone (has name= child zones).
+      // Insert the new zone as the last child of that container.
+      let updatedDash = null;
+
+      // Extract the <zones>...</zones> section (before devicelayouts)
+      const zonesSection = dashXml.match(/<zones>[\s\S]*?<\/zones>/);
+      if (!zonesSection) { log.push(`⚠️ No <zones> found in dashboard '${dashName}'`); continue; }
+      const zonesXml = zonesSection[0];
+
+      // Find all layout-flow containers and pick the one that has worksheet zone children
+      const flowContainers = [...zonesXml.matchAll(/<zone[^>]*param='(vert|horz)'[^>]*type-v2='layout-flow'[^>]*>/g)];
+      let bestContainer = null;
+      for (const fc of flowContainers) {
+        // Check if this container directly holds a worksheet zone (zone with name= but no type-v2=filter etc)
+        const startPos = zonesXml.indexOf(fc[0]);
+        // Look at the next 500 chars for direct worksheet zone children
+        const snippet = zonesXml.slice(startPos + fc[0].length, startPos + fc[0].length + 500);
+        if (snippet.match(/<zone[^>]+name='[^']+[^>]*>/)) {
+          bestContainer = fc;
+          break;
+        }
       }
+
+      if (bestContainer) {
+        // Use smartFind to get the full container element, then insert before its closing </zone>
+        const containerFull = smartFind(zonesXml, bestContainer[0]);
+        if (containerFull) {
+          const closingTag = '</zone>';
+          const insertPos = containerFull.lastIndexOf(closingTag);
+          if (insertPos !== -1) {
+            const updatedContainer = containerFull.slice(0, insertPos) + '\n              ' + zoneXml + '\n            ' + containerFull.slice(insertPos);
+            updatedDash = dashXml.replace(containerFull, updatedContainer);
+          }
+        }
+      }
+
+      // Fallback: insert before </zones>
+      if (!updatedDash) {
+        updatedDash = dashXml.replace('</zones>', zoneXml + '\n      </zones>');
+        console.log(`  → Fallback: inserted zone before </zones>`);
+      }
+
       xml = xml.replace(dashXml, updatedDash);
       applied++;
       log.push(`✅ Added zone to dashboard '${dashName}'`);
@@ -1317,20 +1341,40 @@ async function analyzeAndFixJira(issueKey, siteKey) {
       const dashMatch = xml.match(dashRegex);
       if (!dashMatch) { log.push(`Dashboard '${dashName}' not found`); continue; }
       const dashXml = dashMatch[0];
-      const wsZoneCloses = [...dashXml.matchAll(/<zone[^>]+name='[^']+(?:(?!type-v2)|[^>]*type-v2='worksheet')[^>]*>[\s\S]*?<\/zone>/g)];
-      let updatedDash;
-      if (wsZoneCloses.length) {
-        const lastWsZone = wsZoneCloses[wsZoneCloses.length - 1][0];
-        updatedDash = dashXml.replace(lastWsZone, lastWsZone + '\n              ' + zoneXml);
-      } else {
-        const zonesMatch = dashXml.match(/<zones>[\s\S]*?<\/zones>/);
-        if (!zonesMatch) { log.push(`No <zones> found in dashboard '${dashName}'`); continue; }
-        const zonesXml = zonesMatch[0];
-        const lastCloseIdx = zonesXml.lastIndexOf('</zone>', zonesXml.lastIndexOf('</zones>'));
-        if (lastCloseIdx === -1) { log.push(`No zones to anchor in dashboard '${dashName}'`); continue; }
-        const updatedZones = zonesXml.slice(0, lastCloseIdx) + zoneXml + '\n            ' + zonesXml.slice(lastCloseIdx);
-        updatedDash = dashXml.replace(zonesXml, updatedZones);
+
+      let updatedDash = null;
+      const zonesSection = dashXml.match(/<zones>[\s\S]*?<\/zones>/);
+      if (!zonesSection) { log.push(`No <zones> found in dashboard '${dashName}'`); continue; }
+      const zonesXml = zonesSection[0];
+
+      const flowContainers = [...zonesXml.matchAll(/<zone[^>]*param='(vert|horz)'[^>]*type-v2='layout-flow'[^>]*>/g)];
+      let bestContainer = null;
+      for (const fc of flowContainers) {
+        const startPos = zonesXml.indexOf(fc[0]);
+        const snippet = zonesXml.slice(startPos + fc[0].length, startPos + fc[0].length + 500);
+        if (snippet.match(/<zone[^>]+name='[^']+[^>]*>/)) {
+          bestContainer = fc;
+          break;
+        }
       }
+
+      if (bestContainer) {
+        const containerFull = smartFind(zonesXml, bestContainer[0]);
+        if (containerFull) {
+          const closingTag = '</zone>';
+          const insertPos = containerFull.lastIndexOf(closingTag);
+          if (insertPos !== -1) {
+            const updatedContainer = containerFull.slice(0, insertPos) + '\n              ' + zoneXml + '\n            ' + containerFull.slice(insertPos);
+            updatedDash = dashXml.replace(containerFull, updatedContainer);
+          }
+        }
+      }
+
+      if (!updatedDash) {
+        updatedDash = dashXml.replace('</zones>', zoneXml + '\n      </zones>');
+        console.log(`  → Fallback: inserted zone before </zones>`);
+      }
+
       xml = xml.replace(dashXml, updatedDash);
       applied++;
       log.push(`Added zone to dashboard '${dashName}'`);
