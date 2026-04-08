@@ -28,6 +28,15 @@ const JIRA_EMAIL   = e('JIRA_EMAIL');
 const JIRA_HOST    = 'biztory.atlassian.net';
 const JIRA_PROJECT = 'BTSA'; // locked — issues may only ever be created on this board
 
+// Tableau Cloud config (for publishing log datasource)
+const TABLEAU_URL      = (e('Tableau_URL') || 'https://10ax.online.tableau.com').replace(/\/$/, '');
+const TABLEAU_API_VER  = '3.22';
+const LOG_DS_NAME      = 'TabServo-log';
+// Use timdriesdev PAT by default for log publishing
+const LOG_PAT_NAME     = e('TABLEAU_PAT_NAME_TIMDRIESDEV') || e('TABLEAU_PAT_NAME') || '';
+const LOG_PAT_SECRET   = e('TABLEAU_PAT_SECRET_TIMDRIESDEV') || e('TABLEAU_PAT_SECRET') || '';
+const LOG_SITE         = 'timdriesdev';
+
 // ---- Request log (persistent JSON + XLS) ----
 const XLSX     = require('xlsx');
 const LOG_FILE = path.join(__dirname, 'request-log.json');
@@ -41,6 +50,7 @@ function readLog() {
 function writeLog(entries) {
   fs.writeFileSync(LOG_FILE, JSON.stringify(entries, null, 2));
   syncXls(entries);
+  publishLogToTableau(entries).catch(err => console.log(`[Log] Tableau publish failed: ${err.message}`));
 }
 
 function syncXls(entries) {
@@ -52,14 +62,119 @@ function syncXls(entries) {
     'Tableau Site':   e.tableauSite,
     'Workbook':       e.workbook,
     'Timestamp':      e.timestamp,
-    'Fix Succeeded':  e.fixSucceeded === null ? '' : e.fixSucceeded ? 'Yes' : 'No',
-    'Accepted':       e.accepted === null ? '' : e.accepted ? 'Accepted' : 'Declined',
+    'Fix Succeeded':  e.fixSucceeded === null ? 'Pending' : e.fixSucceeded ? 'Yes' : 'No',
+    'Accepted':       e.accepted === null ? 'Pending' : e.accepted ? 'Accepted' : 'Declined',
     'Decline Reason': e.declineReason || ''
   }));
   const ws = XLSX.utils.json_to_sheet(rows);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Request Log');
   XLSX.writeFile(wb, XLS_FILE);
+}
+
+// ---- Publish log as Tableau datasource ----
+async function publishLogToTableau(entries) {
+  if (!LOG_PAT_NAME || !LOG_PAT_SECRET) return; // skip if no credentials
+
+  // Auth
+  const authBody = JSON.stringify({
+    credentials: { personalAccessTokenName: LOG_PAT_NAME, personalAccessTokenSecret: LOG_PAT_SECRET, site: { contentUrl: LOG_SITE } }
+  });
+  const authResp = await httpReqSimple('POST', `${TABLEAU_URL}/api/${TABLEAU_API_VER}/auth/signin`, authBody);
+  if (!authResp?.credentials?.token) return;
+  const token = authResp.credentials.token;
+  const siteId = authResp.credentials.site.id;
+
+  // Find default project
+  const projResp = await httpReqSimple('GET', `${TABLEAU_URL}/api/${TABLEAU_API_VER}/sites/${siteId}/projects?filter=name:eq:Default`, null, token);
+  const projectId = projResp?.projects?.project?.[0]?.id;
+  if (!projectId) { console.log('[Log] Default project not found'); return; }
+
+  // Build CSV
+  const headers = ['Issue ID', 'Summary', 'Category', 'Destination', 'Tableau Site', 'Workbook', 'Timestamp', 'Fix Succeeded', 'Accepted', 'Decline Reason'];
+  const csvRows = [headers.join(',')];
+  for (const e of entries) {
+    csvRows.push([
+      e.issueId, `"${(e.summary || '').replace(/"/g, '""')}"`, e.category || '', e.destination || '',
+      e.tableauSite || '', `"${(e.workbook || '').replace(/"/g, '""')}"`, e.timestamp || '',
+      e.fixSucceeded === null ? 'Pending' : e.fixSucceeded ? 'Yes' : 'No',
+      e.accepted === null ? 'Pending' : e.accepted ? 'Accepted' : 'Declined',
+      `"${(e.declineReason || '').replace(/"/g, '""')}"`
+    ].join(','));
+  }
+  const csvData = csvRows.join('\n');
+
+  // Build .tds XML
+  const tdsXml = `<?xml version='1.0' encoding='utf-8' ?>
+<datasource formatted-name='TabServo-log' inline='true' source-platform='mac' version='18.1'>
+  <connection class='textscan' directory='' filename='log.csv' separator=','>
+    <relation name='log' table='[log#csv]' type='table'>
+      <columns header='yes'>
+        <column datatype='string' name='Issue ID' ordinal='0' />
+        <column datatype='string' name='Summary' ordinal='1' />
+        <column datatype='string' name='Category' ordinal='2' />
+        <column datatype='string' name='Destination' ordinal='3' />
+        <column datatype='string' name='Tableau Site' ordinal='4' />
+        <column datatype='string' name='Workbook' ordinal='5' />
+        <column datatype='string' name='Timestamp' ordinal='6' />
+        <column datatype='string' name='Fix Succeeded' ordinal='7' />
+        <column datatype='string' name='Accepted' ordinal='8' />
+        <column datatype='string' name='Decline Reason' ordinal='9' />
+      </columns>
+    </relation>
+  </connection>
+</datasource>`;
+
+  // Package as .tdsx (ZIP)
+  const AdmZip = require('adm-zip');
+  const zip = new AdmZip();
+  zip.addFile('TabServo-log.tds', Buffer.from(tdsXml, 'utf8'));
+  zip.addFile('log.csv', Buffer.from(csvData, 'utf8'));
+  const tdsxBuffer = zip.toBuffer();
+
+  // Publish datasource
+  const boundary = `TabServoDSBoundary${Date.now()}`;
+  const meta = JSON.stringify({ datasource: { name: LOG_DS_NAME, project: { id: projectId } } });
+  const NL = '\r\n';
+  const body = Buffer.concat([
+    Buffer.from(`--${boundary}${NL}Content-Disposition: name="request_payload"${NL}Content-Type: application/json${NL}${NL}${meta}${NL}`),
+    Buffer.from(`--${boundary}${NL}Content-Disposition: name="tableau_datasource"; filename="${LOG_DS_NAME}.tdsx"${NL}Content-Type: application/octet-stream${NL}${NL}`),
+    tdsxBuffer,
+    Buffer.from(`${NL}--${boundary}--${NL}`)
+  ]);
+
+  const pubResp = await httpReqSimple('POST', `${TABLEAU_URL}/api/${TABLEAU_API_VER}/sites/${siteId}/datasources?overwrite=true`, body, token, `multipart/mixed; boundary=${boundary}`);
+  console.log(`[Log] Published ${LOG_DS_NAME} to Tableau Cloud (${entries.length} rows)`);
+  return pubResp;
+}
+
+// Simple HTTP helper for Tableau API calls in server.js
+function httpReqSimple(method, url, body, authToken, contentType) {
+  return new Promise((resolve) => {
+    const parsed = new URL(url);
+    const mod = parsed.protocol === 'https:' ? https : http;
+    const headers = { 'Accept': 'application/json' };
+    if (authToken) headers['X-Tableau-Auth'] = authToken;
+    if (body && !contentType) headers['Content-Type'] = 'application/json';
+    if (contentType) headers['Content-Type'] = contentType;
+    const bodyBuf = body ? (Buffer.isBuffer(body) ? body : Buffer.from(body)) : null;
+    if (bodyBuf) headers['Content-Length'] = bodyBuf.length;
+
+    const req = mod.request({
+      hostname: parsed.hostname, port: parsed.port || (parsed.protocol === 'https:' ? 443 : 80),
+      path: parsed.pathname + parsed.search, method, headers
+    }, (res) => {
+      let data = Buffer.alloc(0);
+      res.on('data', c => data = Buffer.concat([data, c]));
+      res.on('end', () => {
+        try { resolve(JSON.parse(data.toString())); }
+        catch { resolve(null); }
+      });
+    });
+    req.on('error', () => resolve(null));
+    if (bodyBuf) req.write(bodyBuf);
+    req.end();
+  });
 }
 
 function logRequest(entry) {
