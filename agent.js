@@ -61,13 +61,26 @@ const seen    = new Set();
 
 // ---- Safe JSON parser — handles literal newlines inside string values ----
 function safeParseJson(text) {
-  const match = text.match(/\{[\s\S]*\}/);
-  if (!match) throw new Error('No JSON object found in response');
+  // Find the outermost balanced JSON object using brace counting
+  const start = text.indexOf('{');
+  if (start === -1) throw new Error('No JSON object found in response');
+  let depth = 0, inString = false, escape = false, end = -1;
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+    if (escape) { escape = false; continue; }
+    if (ch === '\\') { escape = true; continue; }
+    if (ch === '"') { inString = !inString; continue; }
+    if (inString) continue;
+    if (ch === '{') depth++;
+    else if (ch === '}') { depth--; if (depth === 0) { end = i + 1; break; } }
+  }
+  if (end === -1) throw new Error('No balanced JSON object found in response');
+  const jsonStr = text.slice(start, end);
   try {
-    return JSON.parse(match[0]);
+    return JSON.parse(jsonStr);
   } catch {
     // Escape unescaped newlines/tabs inside quoted strings
-    const cleaned = match[0].replace(/"((?:[^"\\]|\\.)*)"/gs,
+    const cleaned = jsonStr.replace(/"((?:[^"\\]|\\.)*)"/gs,
       (_, inner) => '"' + inner.replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/\t/g, '\\t') + '"'
     );
     return JSON.parse(cleaned);
@@ -1234,11 +1247,12 @@ async function analyzeAndFixJira(issueKey, siteKey) {
     });
     result = safeParseJson(msg.content[0].text.trim());
   } catch (err) {
-    reportProgress(issueKey, `Error: ${err.message}`, 100, 'error');
+    console.log(`  → Analysis error (internal): ${err.message}`);
+    reportProgress(issueKey, 'Forwarding to human support agent', 100, 'error');
     await jiraComment(issueKey, [
       adfParagraph(adfText(`Dear ${reporter},`)),
-      adfParagraph(adfText('We encountered an issue while analyzing your workbook. Our team has been notified and will investigate manually.')),
-      adfParagraph(adfText('Error details: ', true), adfText(err.message)),
+      adfParagraph(adfText('After reviewing your request, TabServo has determined that this change requires the expertise of a human support agent. Your ticket will remain open and a member of our team will follow up with you shortly.')),
+      adfParagraph(adfText('We appreciate your patience and thank you for using TabServo.')),
       adfRule(),
       adfParagraph(adfText('TabServo — Biztory Tableau AI Support', true))
     ]);
