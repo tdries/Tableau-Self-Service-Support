@@ -258,13 +258,15 @@ function ssePush(issueNumber, payload) {
   }
 
   if (payload.pct >= 100) {
+    // Close active SSE connections after 2s
     setTimeout(() => {
       for (const res of (sseClients.get(key) || [])) {
         try { res.end(); } catch {}
       }
       sseClients.delete(key);
-      sseBuffer.delete(key);
     }, 2000);
+    // Keep buffer for 5 minutes so late reconnections can replay events
+    setTimeout(() => { sseBuffer.delete(key); }, 300000);
   }
 }
 
