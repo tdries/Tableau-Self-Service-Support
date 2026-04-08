@@ -915,7 +915,7 @@ async function analyzeAndFix(issue, siteKey) {
   let targets;
   try {
     const pass1 = await claudeCreate({
-      model: 'claude-sonnet-4-6',
+      model: 'claude-haiku-4-5-20251001',
       max_tokens: 500,
       messages: [{ role: 'user', content:
         `Given this Tableau workbook overview:\n\n${overview}\n\nAnd this user request:\nTitle: ${issue.title}\nDescription: ${issueText}\n\nWhich specific worksheets, dashboards, and datasources do you need to see the FULL XML for to fix this? Respond ONLY with JSON:\n{ "targets": [{ "type": "worksheet|dashboard|datasource", "name": "exact name" }] }\n\nInclude ALL relevant sections. If unsure, include more rather than less.`
@@ -1079,9 +1079,14 @@ async function analyzeAndFix(issue, siteKey) {
   // Publish to Tableau Cloud
   reportProgress(n, 'Publishing fixed workbook to Tableau Cloud…', 90);
   try {
-    // Re-authenticate to get a fresh token — the original may have gone stale during analysis
-    ({ token, siteId } = await tableauAuth(siteKey));
-    await tableauPublish(token, siteId, workbook.project.id, workbook.name, fixedBuffer);
+    try {
+      await tableauPublish(token, siteId, workbook.project.id, workbook.name, fixedBuffer);
+    } catch (pubErr) {
+      // If first attempt fails (token may have expired), re-auth and retry once
+      console.log(`  → Publish failed (${pubErr.message}), re-authenticating...`);
+      ({ token, siteId } = await tableauAuth(siteKey));
+      await tableauPublish(token, siteId, workbook.project.id, workbook.name, fixedBuffer);
+    }
     console.log('  → Published to Tableau Cloud');
   } catch (err) {
     reportProgress(n, `Error publishing: ${err.message}`, 100, 'error');
@@ -1123,26 +1128,7 @@ async function analyzeAndFixJira(issueKey, siteKey) {
   const descText = adfToText(issue.fields.description);
   const reporter = issue.fields.reporter?.displayName?.split(' ')[0] || 'there';
 
-  // Step 1 — interpretation comment
-  reportProgress(issueKey, 'Interpreting issue…', 8);
-  let interpretation;
-  try {
-    const msg = await claudeCreate({
-      model: 'claude-opus-4-6',
-      max_tokens: 300,
-      messages: [{ role: 'user', content:
-        `You are TabServo, a Tableau support AI by Biztory. A user named ${reporter} submitted this issue:\n\nTitle: ${title}\nDescription: ${descText.slice(0, 800)}\n\nWrite a professional Jira comment (3-4 sentences) that:\n1. Opens with "Dear ${reporter},"\n2. Thanks them for reaching out\n3. Restates how you understand the problem\n4. Confirms you are now analyzing the workbook and will follow up shortly\n\nKeep the tone warm but professional. Do not use emojis.`
-      }]
-    });
-    interpretation = msg.content[0].text.trim();
-  } catch {
-    interpretation = `Dear ${reporter},\n\nThank you for reaching out. We have received your issue "${title}" and are now analyzing your workbook. We will follow up shortly with our findings.`;
-  }
-
-  await jiraComment(issueKey, interpretation);
-  reportProgress(issueKey, 'Response posted — connecting to Tableau Cloud…', 12);
-
-  // Extract workbook name
+  // Extract workbook name early — fail fast before doing anything else
   const workbookName = extractWorkbookName(descText);
   if (!workbookName) {
     reportProgress(issueKey, 'No workbook name found in issue', 100, 'warn');
@@ -1156,11 +1142,24 @@ async function analyzeAndFixJira(issueKey, siteKey) {
     return;
   }
 
-  // Auth + find workbook
+  // Step 1 — Post interpretation comment + auth + find workbook IN PARALLEL
+  reportProgress(issueKey, 'Interpreting issue…', 8);
+  const interpretationText = `Dear ${reporter},\n\nThank you for reaching out. We have received your issue "${title}" and are now analyzing your workbook. We will follow up shortly with our findings.`;
+
   let token, siteId, workbook;
   try {
-    ({ token, siteId } = await tableauAuth(siteKey));
-    workbook = await tableauFindWorkbook(token, siteId, workbookName);
+    // Run Jira comment and Tableau auth+find in parallel — saves ~3-5s
+    const [, authResult] = await Promise.all([
+      jiraComment(issueKey, interpretationText),
+      (async () => {
+        const auth = await tableauAuth(siteKey);
+        const wb = await tableauFindWorkbook(auth.token, auth.siteId, workbookName);
+        return { ...auth, workbook: wb };
+      })()
+    ]);
+    ({ token, siteId } = authResult);
+    workbook = authResult.workbook;
+    reportProgress(issueKey, 'Response posted — connecting to Tableau Cloud…', 12);
     console.log(`  → Found: ${workbook.name} (${workbook.id})`);
   } catch (err) {
     reportProgress(issueKey, `Error: ${err.message}`, 100, 'error');
@@ -1218,7 +1217,7 @@ async function analyzeAndFixJira(issueKey, siteKey) {
   let targets;
   try {
     const pass1 = await claudeCreate({
-      model: 'claude-sonnet-4-6',
+      model: 'claude-haiku-4-5-20251001',
       max_tokens: 500,
       messages: [{ role: 'user', content:
         `Given this Tableau workbook overview:\n\n${overview}\n\nAnd this user request:\nTitle: ${title}\nDescription: ${issueText}\n\nWhich specific worksheets, dashboards, and datasources do you need to see the FULL XML for to fix this? Respond ONLY with JSON:\n{ "targets": [{ "type": "worksheet|dashboard|datasource", "name": "exact name" }] }\n\nInclude ALL relevant sections. If unsure, include more rather than less.`
@@ -1380,9 +1379,13 @@ async function analyzeAndFixJira(issueKey, siteKey) {
   // Publish
   reportProgress(issueKey, 'Publishing fixed workbook to Tableau Cloud…', 90);
   try {
-    // Re-authenticate to get a fresh token — the original may have gone stale during analysis
-    ({ token, siteId } = await tableauAuth(siteKey));
-    await tableauPublish(token, siteId, workbook.project.id, workbook.name, fixedBuffer);
+    try {
+      await tableauPublish(token, siteId, workbook.project.id, workbook.name, fixedBuffer);
+    } catch (pubErr) {
+      console.log(`  → Publish failed (${pubErr.message}), re-authenticating...`);
+      ({ token, siteId } = await tableauAuth(siteKey));
+      await tableauPublish(token, siteId, workbook.project.id, workbook.name, fixedBuffer);
+    }
     console.log('  → Published to Tableau Cloud');
   } catch (err) {
     reportProgress(issueKey, `Error publishing: ${err.message}`, 100, 'error');
