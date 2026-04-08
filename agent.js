@@ -929,7 +929,8 @@ async function analyzeAndFix(issue, siteKey) {
   }
 
   if (targets.length) {
-    reportProgress(n, `Identified relevant sections: ${targets.map(t => t.name).join(', ')}`, 40);
+    const readableTargets = targets.filter(t => t.type !== 'datasource').map(t => t.name);
+    if (readableTargets.length) reportProgress(n, `Inspecting: ${readableTargets.join(', ')}`, 40);
   }
 
   // ---- PASS 2: Extract targeted full XML ----
@@ -1239,8 +1240,8 @@ async function analyzeAndFixJira(issueKey, siteKey) {
 
   // Show which sections were identified
   if (targets.length) {
-    const targetNames = targets.map(t => t.name).join(', ');
-    reportProgress(issueKey, `Identified relevant sections: ${targetNames}`, 40);
+    const readableTargets = targets.filter(t => t.type !== 'datasource').map(t => t.name);
+    if (readableTargets.length) reportProgress(issueKey, `Inspecting: ${readableTargets.join(', ')}`, 40);
   }
 
   // ---- PASS 2: Extract targeted full XML and analyze ----
