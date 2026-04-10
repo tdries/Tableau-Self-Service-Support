@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 380 260" font-family="'Segoe UI', system-ui, sans-serif">
+  <rect width="380" height="260" rx="12" fill="#F4F6F8"/>
+
+  <!-- Header -->
+  <rect width="380" height="40" fill="#00375A"/>
+  <text x="20" y="25" fill="rgba(255,255,255,0.5)" font-size="11" font-weight="500" letter-spacing="0.06em">TABSERVO</text>
+  <rect y="40" width="380" height="3" fill="#FF5833"/>
+
+  <!-- Card -->
+  <rect x="16" y="56" width="348" height="190" rx="10" fill="white" stroke="#E2E6EA" stroke-width="1"/>
+
+  <!-- Decline section -->
+  <rect x="36" y="70" width="308" height="158" rx="6" fill="#FCF2E8" stroke="#FF5833" stroke-width="1.5"/>
+
+  <text x="52" y="92" fill="#FF5833" font-size="10" font-weight="600" letter-spacing="0.5">WHY ARE YOU DECLINING?</text>
+
+  <!-- Dropdown -->
+  <rect x="52" y="100" width="276" height="32" rx="6" fill="white" stroke="#E2E6EA" stroke-width="1"/>
+  <text x="64" y="121" fill="#1A2B3C" font-size="12">The change is not correct</text>
+  <text x="304" y="121" fill="#6B7A8D" font-size="10">v</text>
+
+  <!-- Options hint (faded) -->
+  <text x="52" y="150" fill="rgba(255,88,51,0.4)" font-size="9">Nothing changed</text>
+  <text x="52" y="163" fill="rgba(255,88,51,0.4)" font-size="9">Too much was changed</text>
+  <text x="52" y="176" fill="rgba(255,88,51,0.4)" font-size="9">The change was only partially applied</text>
+
+  <!-- Confirm / Cancel buttons -->
+  <rect x="52" y="188" width="136" height="30" rx="6" fill="#FCF2E8" stroke="#FF5833" stroke-width="1.5"/>
+  <text x="120" y="207" text-anchor="middle" fill="#FF5833" font-size="11" font-weight="600">Confirm Decline</text>
+
+  <rect x="196" y="188" width="132" height="30" rx="6" fill="#F4F6F8" stroke="#E2E6EA" stroke-width="1"/>
+  <text x="262" y="207" text-anchor="middle" fill="#6B7A8D" font-size="11" font-weight="600">Cancel</text>
+
+  <!-- Phase label -->
+  <rect x="268" y="4" width="102" height="22" rx="11" fill="rgba(255,88,51,0.2)"/>
+  <text x="319" y="18" text-anchor="middle" fill="#FF5833" font-size="10" font-weight="600">DECLINE</text>
+</svg>

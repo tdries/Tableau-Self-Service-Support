@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 380 310" font-family="'Segoe UI', system-ui, sans-serif">
+  <rect width="380" height="310" rx="12" fill="#F4F6F8"/>
+
+  <!-- Header -->
+  <rect width="380" height="40" fill="#00375A"/>
+  <text x="20" y="25" fill="rgba(255,255,255,0.5)" font-size="11" font-weight="500" letter-spacing="0.06em">TABSERVO</text>
+  <rect y="40" width="380" height="3" fill="#FF5833"/>
+
+  <!-- Card -->
+  <rect x="16" y="56" width="348" height="240" rx="10" fill="white" stroke="#E2E6EA" stroke-width="1"/>
+
+  <!-- Completed progress bar -->
+  <rect x="36" y="70" width="308" height="28" rx="6 6 0 0" fill="#00375A"/>
+  <text x="48" y="89" fill="rgba(255,255,255,0.9)" font-size="10" font-weight="600" letter-spacing="0.5">AGENT ACTIVITY</text>
+  <text x="316" y="89" fill="rgba(255,255,255,0.9)" font-size="10" font-weight="500">100%</text>
+  <rect x="36" y="98" width="308" height="3" fill="#E2E6EA"/>
+  <rect x="36" y="98" width="308" height="3" fill="#00696E"/>
+
+  <!-- Last log entry -->
+  <rect x="36" y="101" width="308" height="30" fill="#FAFBFC" stroke="#E2E6EA" stroke-width="1" rx="0 0 6 6"/>
+  <circle cx="52" cy="118" r="4" fill="#00696E"/>
+  <text x="64" y="115" fill="#6B7A8D" font-size="9">10:45:22</text>
+  <text x="120" y="115" fill="#00696E" font-size="11" font-weight="500">Fix published. Reload your dashboard.</text>
+  <text x="316" y="115" fill="#6B7A8D" font-size="10">100%</text>
+
+  <!-- Refresh prompt -->
+  <rect x="36" y="142" width="308" height="36" rx="4" fill="#EEF4FB"/>
+  <rect x="36" y="142" width="3" height="36" rx="1" fill="#006EFF"/>
+  <text x="50" y="157" fill="#004a78" font-size="11" font-weight="600">Fix applied.</text>
+  <text x="118" y="157" fill="#004a78" font-size="11">Please refresh your Tableau</text>
+  <text x="50" y="172" fill="#004a78" font-size="11">dashboard to review the changes.</text>
+
+  <!-- Fix notice -->
+  <rect x="36" y="188" width="308" height="28" rx="4" fill="#E6FAF2"/>
+  <rect x="36" y="188" width="3" height="28" rx="1" fill="#64FA8C"/>
+  <text x="50" y="203" fill="#00696E" font-size="10" font-weight="600">Your requested change has been applied.</text>
+  <text x="50" y="213" fill="#00696E" font-size="9">Review before accepting.</text>
+
+  <!-- Accept / Decline buttons -->
+  <rect x="36" y="226" width="150" height="36" rx="6" fill="#00375A"/>
+  <text x="111" y="249" text-anchor="middle" fill="white" font-size="13" font-weight="600">Accept</text>
+
+  <rect x="194" y="226" width="150" height="36" rx="6" fill="#FCF2E8" stroke="#FF5833" stroke-width="1.5"/>
+  <text x="269" y="249" text-anchor="middle" fill="#FF5833" font-size="13" font-weight="600">Decline</text>
+
+  <!-- Phase label -->
+  <rect x="280" y="4" width="90" height="22" rx="11" fill="rgba(0,110,255,0.2)"/>
+  <text x="325" y="18" text-anchor="middle" fill="#006EFF" font-size="10" font-weight="600">STEP 5</text>
+</svg>

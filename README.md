@@ -54,6 +54,10 @@ Every request is logged, tracked, and exportable. Issues are automatically close
 
 The user fills in a form inside the Tableau dashboard: title, description, category, and workbook name. They select the Tableau Cloud site and click Submit.
 
+<p align="center">
+  <img src="docs/screenshot-submit.svg" alt="TabServo submit form" width="320"/>
+</p>
+
 A Jira ticket is created instantly with rich formatting: a greeting, the issue description, a details table, and a TabServo signature.
 
 ### 2. Analyse
@@ -86,6 +90,10 @@ Fixes are located in the workbook XML using a three-layer smart matching fallbac
 
 The fixed workbook is republished to Tableau Cloud. The user sees a live activity log with specific progress updates:
 
+<p align="center">
+  <img src="docs/screenshot-progress.svg" alt="TabServo live progress" width="320"/>
+</p>
+
 ```
 10:45:02  Issue BTSA-142 logged in Jira               5%
 10:45:04  Interpreting issue...                        8%
@@ -103,6 +111,12 @@ The fixed workbook is republished to Tableau Cloud. The user sees a live activit
 ### 5. Review
 
 After refreshing the dashboard, the user clicks **Accept** or **Decline**.
+
+<p align="center">
+  <img src="docs/screenshot-review.svg" alt="TabServo accept or decline" width="320"/>
+  &nbsp;&nbsp;&nbsp;
+  <img src="docs/screenshot-decline.svg" alt="TabServo decline reason" width="320"/>
+</p>
 
 - **Accept**: Jira ticket is closed with a professional closing comment
 - **Decline**: User selects a reason (nothing changed, too much changed, not correct, partially applied). The workbook is restored to its backup. Jira ticket moves to the backlog with the decline reason for human follow-up.
