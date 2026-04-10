@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 340" font-family="'Segoe UI', system-ui, sans-serif">
+  <rect width="520" height="340" rx="10" fill="#F7F8FC"/>
+
+  <!-- Comment card -->
+  <rect x="16" y="12" width="488" height="316" rx="8" fill="white" stroke="#DFE1E6" stroke-width="1"/>
+
+  <!-- Avatar + name -->
+  <circle cx="36" cy="36" r="14" fill="#00375A"/>
+  <text x="36" y="40" text-anchor="middle" fill="white" font-size="10" font-weight="700">TS</text>
+  <text x="58" y="32" fill="#172B4D" font-size="12" font-weight="600">TabServo</text>
+  <text x="116" y="32" fill="#6B778C" font-size="11">1 minute ago</text>
+
+  <!-- Body -->
+  <text x="32" y="68" fill="#172B4D" font-size="13">Dear Tim,</text>
+
+  <text x="32" y="94" fill="#172B4D" font-size="13">Great news — we have automatically resolved your issue</text>
+  <text x="32" y="112" fill="#172B4D" font-size="13">and republished the updated workbook to Tableau Cloud.</text>
+
+  <text x="32" y="140" fill="#172B4D" font-size="13"><tspan font-weight="600">What was changed: </tspan>Changed mark type from</text>
+  <text x="32" y="158" fill="#172B4D" font-size="13">Area to Line on Sales by Product and Sales by Segment.</text>
+
+  <text x="32" y="186" fill="#172B4D" font-size="13" font-weight="600">Changes applied (2/2):</text>
+
+  <!-- Bullet list -->
+  <circle cx="42" cy="206" r="3" fill="#172B4D"/>
+  <text x="52" y="210" fill="#172B4D" font-size="12">Applied replace: &lt;mark class='Area' /&gt;</text>
+
+  <circle cx="42" cy="228" r="3" fill="#172B4D"/>
+  <text x="52" y="232" fill="#172B4D" font-size="12">Applied replace: &lt;mark class='Area' /&gt;</text>
+
+  <text x="32" y="260" fill="#172B4D" font-size="13"><tspan font-weight="600">Next steps: </tspan>Please reload your Tableau dashboard</text>
+  <text x="32" y="278" fill="#172B4D" font-size="13">to review the changes. You can then accept the fix or</text>
+  <text x="32" y="296" fill="#172B4D" font-size="13">restore the previous version from the TabServo extension.</text>
+
+  <!-- Separator -->
+  <line x1="32" y1="308" x2="488" y2="308" stroke="#DFE1E6" stroke-width="1"/>
+
+  <!-- Signature -->
+  <text x="32" y="324" fill="#172B4D" font-size="12" font-weight="600">TabServo — Biztory Tableau AI Support</text>
+
+  <!-- Phase label -->
+  <rect x="412" y="16" width="84" height="20" rx="10" fill="rgba(0,105,110,0.1)"/>
+  <text x="454" y="30" text-anchor="middle" fill="#00696E" font-size="9" font-weight="600">FIX APPLIED</text>
+</svg>

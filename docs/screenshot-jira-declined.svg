@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 270" font-family="'Segoe UI', system-ui, sans-serif">
+  <rect width="520" height="270" rx="10" fill="#F7F8FC"/>
+
+  <!-- Header bar with BACKLOG status -->
+  <rect width="520" height="44" rx="10 10 0 0" fill="white" stroke="#DFE1E6" stroke-width="1"/>
+  <rect x="16" y="12" width="22" height="22" rx="4" fill="#0052CC"/>
+  <text x="27" y="27" text-anchor="middle" fill="white" font-size="11" font-weight="700">J</text>
+  <text x="46" y="22" fill="#0052CC" font-size="13" font-weight="500">BTSA-143</text>
+  <text x="110" y="22" fill="#42526E" font-size="13">Remove the map from dashboard</text>
+  <rect x="420" y="12" width="82" height="22" rx="3" fill="#FCF2E8"/>
+  <text x="461" y="27" text-anchor="middle" fill="#FF5833" font-size="10" font-weight="700">BACKLOG</text>
+
+  <line x1="0" y1="44" x2="520" y2="44" stroke="#DFE1E6" stroke-width="1"/>
+
+  <!-- Comment card -->
+  <rect x="16" y="56" width="488" height="202" rx="8" fill="white" stroke="#DFE1E6" stroke-width="1"/>
+
+  <circle cx="36" cy="80" r="14" fill="#00375A"/>
+  <text x="36" y="84" text-anchor="middle" fill="white" font-size="10" font-weight="700">TS</text>
+  <text x="58" y="76" fill="#172B4D" font-size="12" font-weight="600">TabServo</text>
+  <text x="116" y="76" fill="#6B778C" font-size="11">just now</text>
+
+  <text x="32" y="112" fill="#172B4D" font-size="13">Dear Tim,</text>
+
+  <text x="32" y="138" fill="#172B4D" font-size="13">We have been informed that the proposed change was</text>
+  <text x="32" y="156" fill="#172B4D" font-size="13">declined. Your workbook has been restored to its</text>
+  <text x="32" y="174" fill="#172B4D" font-size="13">previous state.</text>
+
+  <text x="32" y="200" fill="#172B4D" font-size="13"><tspan font-weight="600">Reason for declining: </tspan>The change was only</text>
+  <text x="32" y="218" fill="#172B4D" font-size="13">partially applied</text>
+
+  <text x="32" y="244" fill="#172B4D" font-size="13">This ticket will be moved to our backlog and a human</text>
+  <text x="32" y="260" fill="#172B4D" font-size="13">support agent will follow up with you shortly.</text>
+
+  <!-- Phase label -->
+  <rect x="412" y="60" width="84" height="20" rx="10" fill="rgba(255,88,51,0.1)"/>
+  <text x="454" y="74" text-anchor="middle" fill="#FF5833" font-size="9" font-weight="600">DECLINED</text>
+</svg>

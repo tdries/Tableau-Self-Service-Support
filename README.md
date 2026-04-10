@@ -4,6 +4,14 @@
 
 Users describe the problem. The agent reads the workbook, diagnoses the root cause, applies the fix, and republishes. All within minutes. No context-switching. No waiting for IT.
 
+<p align="center">
+  <img src="tabservo-onepager-final.jpg" alt="TabServo One-Pager" width="700"/>
+</p>
+
+<p align="center">
+  <img src="tabservo-demo.jpg" alt="TabServo Demo" width="700"/>
+</p>
+
 ![TabServo System Architecture](docs/architecture.svg)
 
 ---
@@ -60,6 +68,16 @@ The user fills in a form inside the Tableau dashboard: title, description, categ
 
 A Jira ticket is created instantly with rich formatting: a greeting, the issue description, a details table, and a TabServo signature.
 
+<p align="center">
+  <img src="docs/screenshot-jira-created.svg" alt="Jira ticket created" width="480"/>
+</p>
+
+The agent posts an interpretation comment confirming it understood the problem:
+
+<p align="center">
+  <img src="docs/screenshot-jira-interpretation.svg" alt="Jira interpretation comment" width="480"/>
+</p>
+
 ### 2. Analyse
 
 The agent downloads the workbook and unpacks the XML. A two-pass AI pipeline identifies what needs to change:
@@ -108,6 +126,12 @@ The fixed workbook is republished to Tableau Cloud. The user sees a live activit
 10:45:22  Fix published. Reload your dashboard.        100%
 ```
 
+Meanwhile, the Jira ticket receives a detailed comment with everything that was changed:
+
+<p align="center">
+  <img src="docs/screenshot-jira-fixed.svg" alt="Jira fix applied comment" width="480"/>
+</p>
+
 ### 5. Review
 
 After refreshing the dashboard, the user clicks **Accept** or **Decline**.
@@ -120,6 +144,16 @@ After refreshing the dashboard, the user clicks **Accept** or **Decline**.
 
 - **Accept**: Jira ticket is closed with a professional closing comment
 - **Decline**: User selects a reason (nothing changed, too much changed, not correct, partially applied). The workbook is restored to its backup. Jira ticket moves to the backlog with the decline reason for human follow-up.
+
+The Jira ticket is updated automatically based on the decision:
+
+<p align="center">
+  <img src="docs/screenshot-jira-accepted.svg" alt="Jira ticket accepted and closed" width="480"/>
+</p>
+
+<p align="center">
+  <img src="docs/screenshot-jira-declined.svg" alt="Jira ticket declined with reason" width="480"/>
+</p>
 
 ---
 

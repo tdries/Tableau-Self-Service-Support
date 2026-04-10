@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 240" font-family="'Segoe UI', system-ui, sans-serif">
+  <rect width="520" height="240" rx="10" fill="#F7F8FC"/>
+
+  <!-- Header bar with DONE status -->
+  <rect width="520" height="44" rx="10 10 0 0" fill="white" stroke="#DFE1E6" stroke-width="1"/>
+  <rect x="16" y="12" width="22" height="22" rx="4" fill="#0052CC"/>
+  <text x="27" y="27" text-anchor="middle" fill="white" font-size="11" font-weight="700">J</text>
+  <text x="46" y="22" fill="#0052CC" font-size="13" font-weight="500">BTSA-142</text>
+  <text x="110" y="22" fill="#42526E" font-size="13">Change area charts to line charts</text>
+  <rect x="430" y="12" width="72" height="22" rx="3" fill="#E6FAF2"/>
+  <text x="466" y="27" text-anchor="middle" fill="#00696E" font-size="10" font-weight="700">DONE</text>
+
+  <line x1="0" y1="44" x2="520" y2="44" stroke="#DFE1E6" stroke-width="1"/>
+
+  <!-- Comment card -->
+  <rect x="16" y="56" width="488" height="172" rx="8" fill="white" stroke="#DFE1E6" stroke-width="1"/>
+
+  <circle cx="36" cy="80" r="14" fill="#00375A"/>
+  <text x="36" y="84" text-anchor="middle" fill="white" font-size="10" font-weight="700">TS</text>
+  <text x="58" y="76" fill="#172B4D" font-size="12" font-weight="600">TabServo</text>
+  <text x="116" y="76" fill="#6B778C" font-size="11">just now</text>
+
+  <text x="32" y="112" fill="#172B4D" font-size="13">Dear Tim,</text>
+
+  <text x="32" y="138" fill="#172B4D" font-size="13">We are happy to inform you that the proposed change</text>
+  <text x="32" y="156" fill="#172B4D" font-size="13">has been accepted. The fix is now live on your Tableau</text>
+  <text x="32" y="174" fill="#172B4D" font-size="13">dashboard.</text>
+
+  <text x="32" y="200" fill="#172B4D" font-size="13">We will proceed to close this ticket. Should you need</text>
+  <text x="32" y="218" fill="#172B4D" font-size="13">further assistance, please open a new request.</text>
+
+  <!-- Phase label -->
+  <rect x="414" y="60" width="82" height="20" rx="10" fill="rgba(0,105,110,0.1)"/>
+  <text x="455" y="74" text-anchor="middle" fill="#00696E" font-size="9" font-weight="600">ACCEPTED</text>
+</svg>

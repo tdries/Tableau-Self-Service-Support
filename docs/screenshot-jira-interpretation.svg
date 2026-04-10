@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 220" font-family="'Segoe UI', system-ui, sans-serif">
+  <rect width="520" height="220" rx="10" fill="#F7F8FC"/>
+
+  <!-- Comment card -->
+  <rect x="16" y="12" width="488" height="196" rx="8" fill="white" stroke="#DFE1E6" stroke-width="1"/>
+
+  <!-- Avatar + name + time -->
+  <circle cx="36" cy="36" r="14" fill="#00375A"/>
+  <text x="36" y="40" text-anchor="middle" fill="white" font-size="10" font-weight="700">TS</text>
+  <text x="58" y="32" fill="#172B4D" font-size="12" font-weight="600">TabServo</text>
+  <text x="116" y="32" fill="#6B778C" font-size="11">2 minutes ago</text>
+  <rect x="180" y="22" width="82" height="18" rx="3" fill="#DEEBFF"/>
+  <text x="221" y="35" text-anchor="middle" fill="#0052CC" font-size="9" font-weight="500">Internal note</text>
+
+  <!-- Comment body -->
+  <text x="32" y="68" fill="#172B4D" font-size="13">Dear Tim,</text>
+
+  <text x="32" y="94" fill="#172B4D" font-size="13">Thank you for reaching out. We have received your</text>
+  <text x="32" y="112" fill="#172B4D" font-size="13">issue "Change area charts to line charts" and are now</text>
+  <text x="32" y="130" fill="#172B4D" font-size="13">analyzing your workbook. We will follow up shortly</text>
+  <text x="32" y="148" fill="#172B4D" font-size="13">with our findings.</text>
+
+  <!-- Separator -->
+  <line x1="32" y1="162" x2="488" y2="162" stroke="#DFE1E6" stroke-width="1"/>
+
+  <!-- Signature -->
+  <text x="32" y="182" fill="#172B4D" font-size="12" font-weight="600">TabServo — Biztory Tableau AI Support</text>
+
+  <!-- Phase label -->
+  <rect x="396" y="16" width="100" height="20" rx="10" fill="rgba(129,98,252,0.1)"/>
+  <text x="446" y="30" text-anchor="middle" fill="#8162FC" font-size="9" font-weight="600">INTERPRETATION</text>
+</svg>
