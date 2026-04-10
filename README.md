@@ -343,4 +343,60 @@ npm run agent    # Agent polls server for triggers
 
 ---
 
+## Going Forward
+
+> TabServo today solves a narrow set of problems well. The list below is where it goes next.
+
+### Smarter reasoning
+
+| Improvement | What it unlocks |
+|-------------|----------------|
+| **Multi-turn conversations** | The agent asks clarifying questions before applying a fix, reducing incorrect attempts |
+| **Skill library** | Pre-built fix patterns the agent can reference instead of reasoning from scratch every time. Currently it brute-forces through problems. A curated library of known patterns (mark type swaps, filter additions, zone insertions) would dramatically improve speed and reliability |
+| **User feedback loop** | Accept/decline signals feed back into prompt tuning, so the agent gets better with every request |
+
+### Deeper integration
+
+| Improvement | What it unlocks |
+|-------------|----------------|
+| **Jira status transitions** | Automatically move tickets through custom workflows, not just Done/Backlog |
+| **Authentication** | User auth on the extension so every fix is attributed to an individual |
+| **Admin dashboard** | Track fix success rate, common issue types, resolution times, and cost per fix |
+
+### Broader capabilities
+
+| Improvement | What it unlocks |
+|-------------|----------------|
+| **Workbook versioning** | Store fix history per workbook with full diff, not just a single in-memory backup |
+| **Multi-workbook support** | Handle issues that span multiple workbooks or cross-workbook references |
+| **Data source fixes** | Connection issues, permission errors, extract refresh failures |
+| **Extract and publish management** | Trigger refreshes, manage schedules, handle publish conflicts |
+
+### The big unlock: a skill library
+
+The single highest-impact improvement. Today the agent reasons through every problem from first principles using the XML schema documentation in its system prompt. This works, but it is slow, expensive, and sometimes wrong.
+
+A skill library would give the agent a catalogue of proven, tested fix patterns:
+
+```
+skill: swap-mark-type
+  input: worksheet_name, from_class, to_class
+  pattern: find <mark class='{from}' />, replace with <mark class='{to}' />
+  confidence: 99%
+
+skill: add-zone-to-dashboard
+  input: dashboard_name, worksheet_name, position
+  pattern: find layout-flow container, insert zone as last child
+  confidence: 85%
+
+skill: remove-zone-from-dashboard  
+  input: dashboard_name, zone_id
+  pattern: smartFind zone by id, delete entire element tree
+  confidence: 80%
+```
+
+The agent would match the user's request to a skill, fill in the parameters, and execute a known-good pattern instead of generating XML from scratch. New skills get added as the agent learns from successful fixes.
+
+---
+
 *Built by [Biztory](https://biztory.com) as part of the Tableau AI Support initiative.*
