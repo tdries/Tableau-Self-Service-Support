@@ -352,7 +352,7 @@ npm run agent    # Agent polls server for triggers
 | Improvement | What it unlocks |
 |-------------|----------------|
 | **Multi-turn conversations** | The agent asks clarifying questions before applying a fix, reducing incorrect attempts |
-| **Skill library** | Pre-built fix patterns the agent can reference instead of reasoning from scratch every time. Currently it brute-forces through problems. A curated library of known patterns (mark type swaps, filter additions, zone insertions) would dramatically improve speed and reliability |
+| **Skill library** | Pre-built fix patterns the agent can reference instead of reasoning from scratch every time. A curated library of known patterns (mark type swaps, filter additions, zone insertions) would dramatically improve speed and reliability |
 | **User feedback loop** | Accept/decline signals feed back into prompt tuning, so the agent gets better with every request |
 
 ### Deeper integration
