@@ -1,6 +1,8 @@
 # TabServo
 
-**AI-powered Tableau support that lives inside the dashboard.**
+**1st level support case deflection for your IT department.**
+
+AI-powered Tableau support that lives inside the dashboard.
 
 Users describe the problem. The agent reads the workbook, diagnoses the root cause, applies the fix, and republishes. All within minutes. No context-switching. No waiting for IT.
 
