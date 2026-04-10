@@ -400,3 +400,9 @@ The agent would match the user's request to a skill, fill in the parameters, and
 ---
 
 *Built by [Biztory](https://biztory.com) as part of the Tableau AI Support initiative.*
+
+---
+
+> **Copyright (c) 2026 Biztory. All rights reserved.**
+> This software is proprietary and confidential.
+> Unauthorized copying, distribution, or use is strictly prohibited.
