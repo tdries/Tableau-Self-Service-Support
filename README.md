@@ -30,7 +30,7 @@ When a business user spots a broken calculation, a wrong filter, or a mislabeled
 
 For organisations managing dozens of dashboards, this loop burns analyst hours on low-complexity fixes and leaves business users blocked for days on issues an experienced Tableau developer could resolve in minutes.
 
-**Level 1 support should not require a human.**
+**Boring and low complexity repetitive Level 1 support should not require a human. Humans are not robots.**
 
 ## The Solution
 
