@@ -109,15 +109,33 @@ After refreshing the dashboard, the user clicks **Accept** or **Decline**.
 
 ---
 
-## What TabServo Can Fix
+## Current Status
 
-| Confidence | Request Types |
-|-----------|---------------|
-| **High** | Mark type changes, title text, formula edits, filter changes, sorting, number formatting, tooltips |
-| **Medium** | Remove/add sheets to dashboards, create new worksheets, reference lines, dashboard actions, color encoding |
-| **Advanced** | Dual-axis charts, calculated fields, parameter-driven views, groups/sets |
+> **TabServo is heavily under development.** The current focus has been on building the end-to-end experience: seamless submission from inside Tableau, real-time progress tracking, professional Jira integration, one-click restore, and full auditability. The user experience is polished. The AI capabilities are intentionally starting small.
 
-The agent understands the full Tableau TWB XML schema: worksheets, dashboards, zones, datasource-dependencies, column-instances, calculated fields, filters, actions, annotations, and more.
+Today, TabServo reliably handles simple, well-defined changes. Think of it as a capable junior analyst that can follow clear instructions on straightforward tasks. Complex structural changes and multi-step operations are on the roadmap but not yet production-ready.
+
+We chose this approach deliberately. A great experience with limited capabilities is more valuable than broad capabilities with a frustrating experience. The foundation is solid. Expanding what TabServo can do is now a matter of teaching, not rebuilding.
+
+## What TabServo Can Fix Today
+
+| Status | Request Types |
+|--------|---------------|
+| **Reliable** | Mark type changes (Bar, Line, Area), title text updates, formula edits, swap rows/columns, number formatting, tooltips |
+| **Improving** | Filter changes, sorting, color encoding, remove/add sheets to dashboards, reference lines |
+| **Experimental** | Create new worksheets, dashboard actions, calculated fields, dual-axis charts |
+
+The agent understands the full Tableau TWB XML schema: worksheets, dashboards, zones, datasource-dependencies, column-instances, calculated fields, filters, actions, annotations, and more. The schema knowledge is in place. Translating that knowledge into reliable fix generation for every request type is the active area of development.
+
+### Roadmap
+
+Expanding capabilities is the primary focus going forward:
+
+- **Higher success rates** on structural changes (zone removal, zone insertion)
+- **Multi-step operations** (create a chart AND add it to the dashboard AND resize existing zones)
+- **Cross-dashboard awareness** (changes that affect multiple dashboards)
+- **Data source modifications** (calculated fields, parameters, groups, sets)
+- **Learning from failures** (decline reasons feed back into prompt improvements)
 
 ---
 
