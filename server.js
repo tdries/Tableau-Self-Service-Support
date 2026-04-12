@@ -207,6 +207,10 @@ if (!GITHUB_TOKEN) {
   process.exit(1);
 }
 
+// ---- Rate limiting (in-memory) ----
+const rateLimitMap = new Map();
+setInterval(() => { for (const [k, v] of rateLimitMap) { if (Date.now() > v.reset) rateLimitMap.delete(k); } }, 60000);
+
 // ---- Agent trigger / restore queues ----
 const pendingTriggers     = [];
 const pendingRestores     = [];
@@ -420,10 +424,13 @@ const server = http.createServer((req, res) => {
   // CORS — restrict to known origins in production
   const origin = req.headers.origin || '';
   const ALLOWED_ORIGINS = ['https://10ax.online.tableau.com', 'http://localhost:8766', e('RAILWAY_URL')].filter(Boolean);
-  if (ALLOWED_ORIGINS.some(o => origin.startsWith(o)) || !origin) {
-    res.setHeader('Access-Control-Allow-Origin', origin || '*');
+  if (origin && ALLOWED_ORIGINS.some(o => origin.startsWith(o))) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  } else if (!origin) {
+    // Server-to-server calls (agent, curl) have no origin — allow but don't set wildcard
+    res.setHeader('Access-Control-Allow-Origin', ALLOWED_ORIGINS[0] || 'https://10ax.online.tableau.com');
   }
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
   // Security headers
@@ -433,6 +440,19 @@ const server = http.createServer((req, res) => {
 
   if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
 
+  // ---- Rate limiting (in-memory, per IP, 30 req/min) ----
+  const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket.remoteAddress || 'unknown';
+  if (req.method === 'POST') {
+    if (!rateLimitMap.has(clientIp)) rateLimitMap.set(clientIp, { count: 0, reset: Date.now() + 60000 });
+    const rl = rateLimitMap.get(clientIp);
+    if (Date.now() > rl.reset) { rl.count = 0; rl.reset = Date.now() + 60000; }
+    rl.count++;
+    if (rl.count > 30) {
+      res.writeHead(429, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ error: 'Too many requests. Please wait a moment.' }));
+    }
+  }
+
   const url = new URL(req.url, `http://localhost`);
 
   // --- POST /webhook/github  (GitHub Issues webhook) ---
@@ -440,6 +460,17 @@ const server = http.createServer((req, res) => {
     let body = '';
     req.on('data', c => body += c);
     req.on('end', () => {
+      // Verify webhook signature if GITHUB_WEBHOOK_SECRET is set
+      const webhookSecret = e('GITHUB_WEBHOOK_SECRET');
+      if (webhookSecret) {
+        const crypto = require('crypto');
+        const sig = req.headers['x-hub-signature-256'] || '';
+        const expected = 'sha256=' + crypto.createHmac('sha256', webhookSecret).update(body).digest('hex');
+        if (sig !== expected) {
+          console.log('[Webhook] Invalid signature — rejecting');
+          res.writeHead(401); return res.end('Invalid signature');
+        }
+      }
       res.writeHead(204); res.end();
       try {
         const event = req.headers['x-github-event'];
@@ -470,8 +501,13 @@ const server = http.createServer((req, res) => {
     return res.end(JSON.stringify(events));
   }
 
-  // --- POST /api/progress/:issueNumber  (agent → server → SSE clients) ---
+  // --- POST /api/progress/:issueNumber  (agent → server → SSE clients, internal only) ---
   if (req.method === 'POST' && url.pathname.startsWith('/api/progress/')) {
+    // Only accept from localhost or the agent (no external origin)
+    const isInternal = !origin || clientIp === '127.0.0.1' || clientIp === '::1' || clientIp === '::ffff:127.0.0.1';
+    if (!isInternal && origin && !ALLOWED_ORIGINS.some(o => origin.startsWith(o))) {
+      res.writeHead(403); return res.end('Forbidden');
+    }
     const issueNumber = url.pathname.split('/').pop();
     let body = '';
     req.on('data', c => body += c);
@@ -522,7 +558,12 @@ const server = http.createServer((req, res) => {
         return res.end(JSON.stringify({ error: 'Invalid JSON' }));
       }
 
-      const { title, category, description, context, workbookName, destination, tableauSite } = parsed;
+      const { category, context, destination, tableauSite } = parsed;
+      // Sanitize user input — strip HTML tags and limit length
+      const sanitize = s => (s || '').replace(/<[^>]*>/g, '').slice(0, 2000);
+      const title = sanitize(parsed.title);
+      const description = sanitize(parsed.description);
+      const workbookName = sanitize(parsed.workbookName);
       if (!title || !description) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         return res.end(JSON.stringify({ error: 'title and description are required' }));
@@ -703,15 +744,23 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // --- PATCH /api/log/:issueId  (update fix/acceptance status) ---
+  // --- PATCH /api/log/:issueId  (internal only — agent updates fix status) ---
   if (req.method === 'PATCH' && url.pathname.startsWith('/api/log/')) {
+    const isInternal = !origin || clientIp === '127.0.0.1' || clientIp === '::1' || clientIp === '::ffff:127.0.0.1';
+    if (!isInternal && origin) {
+      res.writeHead(403); return res.end('Forbidden');
+    }
     const issueId = decodeURIComponent(url.pathname.split('/').pop());
     let body = '';
     req.on('data', c => body += c);
     req.on('end', () => {
       try {
         const updates = JSON.parse(body);
-        const entry = updateLog(issueId, updates);
+        // Only allow specific fields to be updated
+        const allowed = ['fixSucceeded', 'accepted', 'declineReason'];
+        const safe = {};
+        for (const k of allowed) { if (k in updates) safe[k] = updates[k]; }
+        const entry = updateLog(issueId, safe);
         res.writeHead(entry ? 200 : 404, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(entry || { error: 'not found' }));
       } catch {
