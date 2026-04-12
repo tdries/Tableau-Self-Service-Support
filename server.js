@@ -436,7 +436,7 @@ const server = http.createServer((req, res) => {
 
   // Security headers
   res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  // No X-Frame-Options — extension must load inside Tableau Cloud iframe
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
 
   if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
