@@ -417,9 +417,19 @@ const MIME = {
 };
 
 const server = http.createServer((req, res) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  // CORS — restrict to known origins in production
+  const origin = req.headers.origin || '';
+  const ALLOWED_ORIGINS = ['https://10ax.online.tableau.com', 'http://localhost:8766', e('RAILWAY_URL')].filter(Boolean);
+  if (ALLOWED_ORIGINS.some(o => origin.startsWith(o)) || !origin) {
+    res.setHeader('Access-Control-Allow-Origin', origin || '*');
+  }
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  // Security headers
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
 
   if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
 
@@ -733,11 +743,28 @@ const server = http.createServer((req, res) => {
     }
   }
 
-  // --- Static files ---
-  const filePath = path.join(__dirname, url.pathname === '/' ? 'index.html' : url.pathname);
+  // --- Static files (allowlisted extensions only — never serve source code) ---
+  const ALLOWED_STATIC = new Set(['.html', '.css', '.js', '.png', '.ico', '.webp', '.jpg', '.jpeg', '.svg', '.trex']);
+  const BLOCKED_FILES = new Set(['server.js', 'agent.js', 'package.json', 'package-lock.json', '.env', '.gitignore', 'Procfile', 'start.sh']);
+  const requestedFile = url.pathname === '/' ? 'index.html' : url.pathname.slice(1);
+
+  // Block source code, config files, and dotfiles
+  if (BLOCKED_FILES.has(requestedFile) || requestedFile.startsWith('.') || requestedFile.includes('node_modules')) {
+    res.writeHead(404); return res.end('Not found');
+  }
+
+  const filePath = path.join(__dirname, requestedFile);
+  // Prevent path traversal
+  if (!filePath.startsWith(__dirname)) { res.writeHead(403); return res.end('Forbidden'); }
+
+  const ext = path.extname(filePath);
+  if (!ALLOWED_STATIC.has(ext) && requestedFile !== 'index.html') {
+    res.writeHead(404); return res.end('Not found');
+  }
+
   fs.readFile(filePath, (err, data) => {
     if (err) { res.writeHead(404); return res.end('Not found'); }
-    res.writeHead(200, { 'Content-Type': MIME[path.extname(filePath)] || 'text/plain' });
+    res.writeHead(200, { 'Content-Type': MIME[ext] || 'text/plain' });
     res.end(data);
   });
 });
