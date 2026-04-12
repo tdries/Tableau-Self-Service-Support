@@ -3,6 +3,7 @@ const fs           = require('fs');
 const path         = require('path');
 const https        = require('https');
 const { execFile } = require('child_process');
+const crypto       = require('crypto');
 
 // Load .env manually (no external deps)
 function loadEnv() {
@@ -463,7 +464,6 @@ const server = http.createServer((req, res) => {
       // Verify webhook signature if GITHUB_WEBHOOK_SECRET is set
       const webhookSecret = e('GITHUB_WEBHOOK_SECRET');
       if (webhookSecret) {
-        const crypto = require('crypto');
         const sig = req.headers['x-hub-signature-256'] || '';
         const expected = 'sha256=' + crypto.createHmac('sha256', webhookSecret).update(body).digest('hex');
         if (sig !== expected) {
